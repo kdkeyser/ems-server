@@ -1,0 +1,14 @@
+server:
+  port: 8080
+  appCredentials:
+    rootusername: root
+    rootpassword: root
+    Niel: niel
+    interval: 5
+
+energymanager:
+  config:
+    P1meter: 192.168.129.5
+    webasto: 192.168.129.109
+    mincurrent: 6.0
+    maxcurrent: 32.0

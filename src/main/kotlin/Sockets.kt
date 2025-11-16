@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlin.time.Duration.Companion.seconds
+import io.klogging.logger
 
 fun Application.configureSockets() {
     install(WebSockets) {
@@ -17,8 +18,10 @@ fun Application.configureSockets() {
         maxFrameSize = Long.MAX_VALUE
         masking = false
     }
+    val logger = logger("io.konektis.sockets")
     routing {
         webSocket("/ws") {
+
             var authenticated = false
 
             val job = launch {

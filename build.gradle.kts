@@ -25,16 +25,13 @@ dependencies {
     implementation(libs.ktor.server.sessions)
     implementation(libs.ktor.server.default.headers)
     implementation(libs.ktor.server.netty)
-//    implementation(libs.log4j.api)
-//    implementation(libs.log4j.core)
-//    implementation(libs.log4j.slf4j.impl)
     implementation(libs.ktor.server.config.yaml)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.modbus.tcp)
-    implementation(libs.klogging.jvm)
+    //implementation(libs.klogging.jvm)
     implementation(libs.bits)
     implementation(libs.endian)
     implementation(libs.hoplite.core)
@@ -42,4 +39,8 @@ dependencies {
     implementation(libs.klogging.sl4j)
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
+}
+
+configurations.all {
+    exclude("ch.qos.logback")
 }

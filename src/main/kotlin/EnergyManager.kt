@@ -35,7 +35,7 @@ class EnergyManager : Klogging {
                 Mode.AUTO -> {
                     val p1MeterValues =
                         try {
-                            runBlocking { p1Meter.update() }
+                            p1Meter.update()
                         } catch (e: Exception) {
                             logger.error(e)
                             null

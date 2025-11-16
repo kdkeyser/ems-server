@@ -12,34 +12,39 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 suspend fun main(args: Array<String>) {
-    coroutineScope {
-        launch { Main().main() }
-        launch { io.ktor.server.netty.EngineMain.main(args) }
-    }
+    Main().main(args)
 }
 
 class Main : Klogging {
-    suspend fun main() {
+    suspend fun main(args: Array<String>) {
         loggingConfiguration {
             sink("stdout", RENDER_SIMPLE, STDOUT)
             logging {
+                fromLoggerBase("io.konektis")
                 fromMinLevel(Level.TRACE) {
                     toSink("stdout")
                 }
             }
         }
 
-        val config = ConfigLoaderBuilder.default().addResourceSource("/config.yaml").build().loadConfigOrThrow<Config>()
+        val config = ConfigLoaderBuilder.default()
+            .addResourceSource("/config.yaml")
+            .build()
+            .loadConfigOrThrow<Config>()
+
         logger.info(config)
         val energyManager = EnergyManager()
-        energyManager.run(config.energyManager)
+
+        coroutineScope {
+            launch { energyManager.run(config.energyManager) }
+            launch { io.ktor.server.netty.EngineMain.main(args) }
+        }
+
     }
 }
 
 fun Application.module() {
-
-    configureSerialization()
-    configureSecurity()
+   // configureSecurity()
     configureAdministration()
     configureSockets()
     configureDatabases()

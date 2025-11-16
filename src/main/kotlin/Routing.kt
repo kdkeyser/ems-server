@@ -2,6 +2,7 @@ package io.konektis
 
 import io.github.flaxoos.ktor.server.plugins.ratelimiter.*
 import io.github.flaxoos.ktor.server.plugins.ratelimiter.implementations.*
+import io.klogging.logger
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -22,11 +23,13 @@ import org.jetbrains.exposed.sql.*
 import org.slf4j.event.*
 
 fun Application.configureRouting() {
+    val logger = logger("io.konektis.sockets")
     routing {
-        authenticate("auth-basic") {
+
             get("/") {
+                logger.info("Hello World!")
                 call.respondText("Hello World!")
             }
         }
     }
-}
+

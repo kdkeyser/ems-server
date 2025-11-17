@@ -1,15 +1,10 @@
-package io.konektis
+package io.konektis.devices
 
-import com.digitalpetri.modbus.client.ModbusTcpClient
-import com.digitalpetri.modbus.pdu.ReadHoldingRegistersRequest
 import com.digitalpetri.modbus.pdu.ReadInputRegistersRequest
 import com.digitalpetri.modbus.pdu.WriteSingleRegisterRequest
-import com.digitalpetri.modbus.tcp.client.NettyClientTransportConfig
-import com.digitalpetri.modbus.tcp.client.NettyTcpClientTransport
-import io.klogging.Klogging
 import io.klogging.NoCoLogging
+import io.konektis.ModbusTCPClient
 import org.kotlincrypto.bitops.endian.Endian
-import java.time.Duration
 
 private const val MODBUS_REGISTER_KEEPALIVE: Int = 6000
 private const val MODBUS_REGISTER_MAX_CURRENT_CHARGING: Int = 5004

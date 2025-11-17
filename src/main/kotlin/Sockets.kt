@@ -6,15 +6,16 @@ import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlin.time.Duration.Companion.seconds
 import io.klogging.logger
+import io.konektis.ems.EMSState
+import kotlinx.coroutines.flow.Flow
 
-fun Application.configureSockets() {
+fun Application.configureSockets(emsStateFlow: Flow<EMSState>) {
     install(WebSockets) {
-        pingPeriod = 15.seconds
-        timeout = 15.seconds
+        pingPeriod = 30.seconds
+        timeout = 30.seconds
         maxFrameSize = Long.MAX_VALUE
         masking = false
     }
@@ -25,11 +26,28 @@ fun Application.configureSockets() {
             var authenticated = false
 
             val job = launch {
-                while (true) {
-                    delay(5.seconds)
+                emsStateFlow.collect { emsState ->
                     if (authenticated) {
-                        val message = randomPowerUsageUpdate()
+                        val l = ArrayList<Update>()
+                        if (emsState.gridPower != null) {
+                            l.add(Update(Devices.GRID, emsState.gridPower))
+                        }
+                        if (emsState.chargerPower != null) {
+                            l.add(Update(Devices.CAR_CHARGER, emsState.chargerPower))
+                        }
+                        if (emsState.heatpumpPower != null) {
+                            l.add(Update(Devices.HEATPUMP, emsState.heatpumpPower))
+                        }
+                        if (emsState.solarPower != null) {
+                            l.add(Update(Devices.SOLAR, emsState.solarPower))
+                        }
+                        if (emsState.batteryPower != null) {
+                            l.add(Update(Devices.BATTERY, emsState.batteryPower))
+                        }
+                        val message = Message.PowerUsageUpdate(l)
+                        logger.debug("Sending $message")
                         send(Json.encodeToString(message as Message))
+
                     }
                 }
             }

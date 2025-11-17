@@ -1,7 +1,8 @@
-package io.konektis
+package io.konektis.devices
 
 import com.digitalpetri.modbus.pdu.ReadInputRegistersRequest
 import io.klogging.NoCoLogging
+import io.konektis.ModbusTCPClient
 import org.kotlincrypto.bitops.endian.Endian
 
 private const val MODBUS_INPUT_REGISTER_CURRENT_TOTAL_POWER: Int = 50

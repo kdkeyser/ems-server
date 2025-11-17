@@ -9,6 +9,8 @@ class ModbusTCPClient(private val host: String) {
     private var client = makeClient()
 
     private fun makeClient(): ModbusTcpClient {
+        // Use Netty transport for now - Ktor network sockets don't have
+        // a direct compatible interface with the modbus library
         val transport = NettyTcpClientTransport.create { cfg: NettyClientTransportConfig.Builder ->
             cfg.hostname = host
             cfg.port = 502

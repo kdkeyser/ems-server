@@ -29,6 +29,7 @@ dependencies {
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
     implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.network)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.modbus.tcp)
     //implementation(libs.klogging.jvm)
@@ -39,6 +40,9 @@ dependencies {
     implementation(libs.klogging.sl4j)
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
+    testImplementation("io.mockk:mockk:1.13.8")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
+    testImplementation(libs.ktor.client.websockets)
 }
 
 configurations.all {

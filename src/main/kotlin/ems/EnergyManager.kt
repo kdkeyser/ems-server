@@ -1,10 +1,12 @@
 package io.konektis.ems
 
 import io.klogging.Klogging
-import io.konektis.devices.DaikinHomeHub
-import io.konektis.EnergyManagerConfig
-import io.konektis.devices.P1Meter
-import io.konektis.devices.Webasto
+import io.konektis.devices.Heatpump.DaikinHeatpump
+import io.konektis.config.EnergyManagerConfig
+import io.konektis.devices.charger.Webasto
+import io.konektis.devices.grid.GridProperties
+import io.konektis.devices.grid.GridType
+import io.konektis.devices.grid.P1Meter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.time.delay
 import java.time.Duration
@@ -22,10 +24,11 @@ class EnergyManager : Klogging {
     var mode = Mode.AUTO
     val emsStateFlow = MutableStateFlow(EMSState(null, null, null, null, null, null, null))
 
-    suspend fun update(p1Meter: P1Meter, webasto: Webasto, daikinHomeHub: DaikinHomeHub) : EMSState {
+    suspend fun update(p1Meter: P1Meter, webasto: Webasto, daikinHeatpump: DaikinHeatpump) : EMSState {
         val p1MeterValues =
             try {
                 p1Meter.update()
+                p1Meter.state?.update
             } catch (e: Exception) {
                 logger.error(e)
                 null
@@ -39,15 +42,16 @@ class EnergyManager : Klogging {
             }
         val daikinPower : Int? =
             try {
-                daikinHomeHub.getCurrentPowerUsage()
+                daikinHeatpump.update()
+                daikinHeatpump.state?.update?.power?.value?.toInt()
             } catch (e: Exception) {
                 logger.error(e)
                 null
             }
 
         return EMSState(
-            gridPower = p1MeterValues?.active_power_w?.toInt(),
-            gridVoltage = p1MeterValues?.active_voltage_l1_v?.toInt(),
+            gridPower = p1MeterValues?.power?.value,
+            gridVoltage = p1MeterValues?.voltage?.value?.toInt(),
             chargerPower = webastoPower,
             heatpumpPower = daikinPower,
             solarPower = null,
@@ -61,9 +65,9 @@ class EnergyManager : Klogging {
         val P1MeterHost = config.config["P1meter"]?:"0.0.0.0"
         val webastoHost = config.config["webasto"]?:"0.0.0.0"
         val daikinHomeHubHost = config.config["daikinHomeHub"]?:"0.0.0.0"
-        val p1Meter = P1Meter(P1MeterHost)
+        val p1Meter = P1Meter(P1MeterHost, GridProperties(GridType.Ph1))
         val webasto = Webasto(webastoHost)
-        val daikinHomeHub = DaikinHomeHub(daikinHomeHubHost)
+        val daikinHomeHub = DaikinHeatpump(daikinHomeHubHost)
 
         thread {
             webasto.keepAliveLoop()

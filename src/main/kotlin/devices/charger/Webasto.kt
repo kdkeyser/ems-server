@@ -1,4 +1,4 @@
-package io.konektis.devices
+package io.konektis.devices.charger
 
 import com.digitalpetri.modbus.pdu.ReadInputRegistersRequest
 import com.digitalpetri.modbus.pdu.WriteSingleRegisterRequest

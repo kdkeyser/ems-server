@@ -7,6 +7,7 @@ import io.klogging.Level
 import io.klogging.config.loggingConfiguration
 import io.klogging.rendering.RENDER_SIMPLE
 import io.klogging.sending.STDOUT
+import io.konektis.config.loadConfig
 import io.konektis.ems.EMSState
 import io.konektis.ems.EnergyManager
 import io.ktor.server.application.*
@@ -33,10 +34,7 @@ class Main : Klogging {
             }
         }
 
-        val config = ConfigLoaderBuilder.default()
-            .addResourceSource("/config.yaml")
-            .build()
-            .loadConfigOrThrow<Config>()
+        val config = loadConfig("/config.yaml")
 
         logger.info(config)
         val energyManager = EnergyManager()

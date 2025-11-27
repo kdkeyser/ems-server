@@ -9,5 +9,6 @@ data class ChargerState(
 
 interface Charger {
     suspend fun update()
-    val state: DeviceUpdate<ChargerState>?
+    suspend fun getState(): DeviceUpdate<ChargerState>?
+    suspend fun setMaxChargerPower(power: Watt)
 }

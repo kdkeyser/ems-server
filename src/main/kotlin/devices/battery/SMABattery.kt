@@ -1,13 +1,19 @@
 package io.konektis.devices.battery
 import com.digitalpetri.modbus.pdu.ReadInputRegistersRequest
 import com.digitalpetri.modbus.pdu.WriteMultipleRegistersRequest
-import io.klogging.NoCoLogging
+import io.klogging.Klogging
+import io.konektis.GlobalTimeSource
 import io.konektis.ModbusTCPClient
+import io.konektis.devices.DeviceUpdate
 import io.konektis.devices.Watt
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.kotlincrypto.bitops.endian.Endian
 
-class SMABattery(private val host: String) : NoCoLogging {
+class SMABattery(private val host: String) : Klogging, Battery {
     private val client = ModbusTCPClient(host)
+    private var internalState : DeviceUpdate<BatteryState>? = null
+    private val mutex = Mutex()
 
     private val MODBUS_INPUT_REGISTER_CURRENT_BATTERY_CAPACITY = 30845
     private val MODBUS_INPUT_REGISTER_BATTERY_CHARGE = 31397 // Total energy charged to the battery over its lifetime, in Wh
@@ -44,22 +50,44 @@ class SMABattery(private val host: String) : NoCoLogging {
         return Endian.Big.intFrom(result.registers,0).toUInt()
     }
 
-    fun setChargingPower(power : Watt) {
-        val result = client.withClient { client ->
-            val bytes = ByteArray(4)
-            Endian.Big.pack(801, bytes, 0)
-            client.writeMultipleRegisters(3, WriteMultipleRegistersRequest(MODBUS_OUTPUT_REGISTER_CHARGING_CONTROL, 2, bytes ))
-        }
-        // TODO: what to do with result?
+    suspend fun setChargingPower(power : Watt) {
+        mutex.withLock {
+            val result = client.withClient { client ->
+                val bytes = ByteArray(4)
+                Endian.Big.pack(801, bytes, 0)
+                client.writeMultipleRegisters(
+                    3,
+                    WriteMultipleRegistersRequest(MODBUS_OUTPUT_REGISTER_CHARGING_CONTROL, 2, bytes)
+                )
+            }
+            // TODO: what to do with result?
 
-        val result2 = client.withClient { client ->
-            val bytes = ByteArray(4)
-            Endian.Big.pack(power.value, bytes, 0)
-            client.writeMultipleRegisters(3, WriteMultipleRegistersRequest(MODBUS_OUTPUT_REGISTER_CHARGING_POWER,2, bytes))
+            val result2 = client.withClient { client ->
+                val bytes = ByteArray(4)
+                Endian.Big.pack(power.value, bytes, 0)
+                client.writeMultipleRegisters(
+                    3,
+                    WriteMultipleRegistersRequest(MODBUS_OUTPUT_REGISTER_CHARGING_POWER, 2, bytes)
+                )
+            }
         }
     }
 
-    fun getState(): BatteryState {
+    override suspend fun update() {
+        mutex.withLock {
+            logger.debug { "Updating battery state"}
+            internalState = DeviceUpdate(GlobalTimeSource.source.markNow(), getInternalState())
+            logger.debug {"Battery updated with state $internalState"}
+        }
+    }
+
+    override suspend fun getState(): DeviceUpdate<BatteryState>? {
+        mutex.withLock {
+            return internalState
+        }
+    }
+
+    fun getInternalState(): BatteryState {
         val capacity = getCapacity()
         val charge = getCharge()
         val currentCharge = getCurrentCharge()

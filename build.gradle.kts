@@ -2,13 +2,20 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.ktor)
     alias(libs.plugins.kotlin.plugin.serialization)
+    alias(libs.plugins.shadow)
 }
 
 group = "io.konektis"
 version = "0.0.1"
 
 application {
-    mainClass = "io.ktor.server.netty.EngineMain"
+    mainClass = "io.konektis.ApplicationKt"
+}
+
+tasks {
+    shadowJar {
+        mergeServiceFiles()
+    }
 }
 
 dependencies {

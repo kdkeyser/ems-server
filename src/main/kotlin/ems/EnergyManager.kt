@@ -1,11 +1,13 @@
 package io.konektis.ems
 
 import io.klogging.Klogging
+import io.konektis.config.Config
+import io.konektis.config.GridMeterType
+import io.konektis.config.GridType
 import io.konektis.devices.Heatpump.DaikinHeatpump
-import io.konektis.config.EnergyManagerConfig
+import io.konektis.devices.Watt
 import io.konektis.devices.charger.Webasto
 import io.konektis.devices.grid.GridProperties
-import io.konektis.devices.grid.GridType
 import io.konektis.devices.grid.P1Meter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.time.delay
@@ -28,14 +30,15 @@ class EnergyManager : Klogging {
         val p1MeterValues =
             try {
                 p1Meter.update()
-                p1Meter.state?.update
+                p1Meter.getState()?.update
             } catch (e: Exception) {
                 logger.error(e)
                 null
             }
         val webastoPower: Int? =
             try {
-                webasto.getCurrentPowerUsage()
+                webasto.update()
+                webasto.getState()?.update?.currentPower?.value?.toInt()
             } catch (e: Exception) {
                 logger.error(e)
                 null
@@ -43,7 +46,7 @@ class EnergyManager : Klogging {
         val daikinPower : Int? =
             try {
                 daikinHeatpump.update()
-                daikinHeatpump.state?.update?.power?.value?.toInt()
+                daikinHeatpump.getState()?.update?.power?.value?.toInt()
             } catch (e: Exception) {
                 logger.error(e)
                 null
@@ -61,17 +64,17 @@ class EnergyManager : Klogging {
 
     }
 
-    suspend fun run(config: EnergyManagerConfig) {
-        val P1MeterHost = config.config["P1meter"]?:"0.0.0.0"
-        val webastoHost = config.config["webasto"]?:"0.0.0.0"
-        val daikinHomeHubHost = config.config["daikinHomeHub"]?:"0.0.0.0"
-        val p1Meter = P1Meter(P1MeterHost, GridProperties(GridType.Ph1))
-        val webasto = Webasto(webastoHost)
-        val daikinHomeHub = DaikinHeatpump(daikinHomeHubHost)
+    suspend fun run(config: Config) {
 
-        thread {
-            webasto.keepAliveLoop()
+        val p1Meter =
+            when (config.grid.type) {
+                GridMeterType.P1HomeWizard -> P1Meter(config.grid.host, GridProperties(config.grid.gridType))
+
         }
+        val charger = config.devices.charger?.get(0)!!
+        val heatPump = config.devices.heatPump?.get(0)!!
+        val webasto = Webasto(charger.host)
+        val daikinHomeHub = DaikinHeatpump(heatPump.host)
 
         while (true) {
             logger.debug("EnergyManager loop")
@@ -85,8 +88,8 @@ class EnergyManager : Klogging {
                                 logger.debug("Daikin Heatpump power = ${emsState.heatpumpPower} W")
                                 val availablePower = emsState.chargerPower - emsState.gridPower
                                 logger.info("Available power: $availablePower W")
-                                val maxCurrent = config.config["maxcurrent"] ?: "32"
-                                val minCurrent = config.config["mincurrent"] ?: "6"
+                                val maxCurrent = charger.chargingCurrent.max
+                                val minCurrent = charger.chargingCurrent.min
                                 if (availablePower > 0) {
                                     max(
                                         min(
@@ -108,10 +111,10 @@ class EnergyManager : Klogging {
                     currentMaxAmps
                 }
             }
-            webasto.update(currentMaxAmps)
+            webasto.setMaxChargerPower(Watt(currentMaxAmps * 230))
             emsStateFlow.value = emsState
             logger.info("Updated Webasto charger")
-            val interval = config.config["interval"]?:"5"
+            val interval = 5
             delay(Duration.ofSeconds(interval.toLong()))
         }
     }

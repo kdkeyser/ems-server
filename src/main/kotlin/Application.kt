@@ -8,6 +8,7 @@ import io.klogging.config.loggingConfiguration
 import io.klogging.rendering.RENDER_SIMPLE
 import io.klogging.sending.STDOUT
 import io.konektis.config.loadConfig
+import io.konektis.devices.World
 import io.konektis.ems.EMSState
 import io.konektis.ems.EnergyManager
 import io.ktor.server.application.*
@@ -15,6 +16,7 @@ import io.konektis.ocpp.configureOcppServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
@@ -37,10 +39,18 @@ class Main : Klogging {
         val config = loadConfig("/config.yaml")
 
         logger.info(config)
+        val world = World.fromConfig(config)
+        val dataCollector = DataCollector(config.refreshThreads, world)
         val energyManager = EnergyManager()
 
         coroutineScope {
-            launch { energyManager.run(config.energyManager) }
+            launch {
+                while(true) {
+                    dataCollector.refresh()
+                    delay(5000)
+                }
+            }
+            //launch { energyManager.run(config) }
             launch {
                 val server = embeddedServer(Netty, port = 8080) {
                     module(energyManager.emsStateFlow)

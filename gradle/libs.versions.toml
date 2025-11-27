@@ -7,6 +7,7 @@ log4j = "2.23.1"
 bitops = "0.2.0"
 hoplite = "2.9.0"
 klogging = "0.11.6"
+shadow = "8.3.3"
 
 [libraries]
 ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
@@ -43,3 +44,4 @@ klogging-sl4j = { module = "io.klogging:slf4j-klogging", version.ref = "klogging
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 ktor = { id = "io.ktor.plugin", version.ref = "ktor" }
 kotlin-plugin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }

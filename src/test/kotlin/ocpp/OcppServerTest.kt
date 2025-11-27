@@ -1,13 +1,26 @@
 package io.konektis.ocpp
 
 import io.ktor.client.*
-import io.ktor.client.plugins.websocket.*
+import io.ktor.server.application.*
+import io.ktor.server.websocket.*
+import io.ktor.client.plugins.websocket.WebSockets as ClientWebSockets
+import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.server.testing.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
 import kotlin.test.*
 import kotlin.time.Duration.Companion.seconds
+
+private fun Application.configureTestOcppServer() {
+    install(WebSockets) {
+        pingPeriod = 30.seconds
+        timeout = 60.seconds
+        maxFrameSize = Long.MAX_VALUE
+        masking = false
+    }
+    configureOcppServer()
+}
 
 class OcppServerTest {
     
@@ -19,11 +32,11 @@ class OcppServerTest {
     @Test
     fun testBootNotification() = testApplication {
         application {
-            configureOcppServer()
+            configureTestOcppServer()
         }
 
         val client = createClient {
-            install(WebSockets)
+            install(ClientWebSockets)
         }
 
         client.webSocket("/ocpp/TEST001") {
@@ -59,11 +72,11 @@ class OcppServerTest {
     @Test
     fun testHeartbeat() = testApplication {
         application {
-            configureOcppServer()
+            configureTestOcppServer()
         }
 
         val client = createClient {
-            install(WebSockets)
+            install(ClientWebSockets)
         }
 
         client.webSocket("/ocpp/TEST002") {
@@ -93,11 +106,11 @@ class OcppServerTest {
     @Test
     fun testAuthorize() = testApplication {
         application {
-            configureOcppServer()
+            configureTestOcppServer()
         }
 
         val client = createClient {
-            install(WebSockets)
+            install(ClientWebSockets)
         }
 
         client.webSocket("/ocpp/TEST003") {
@@ -131,11 +144,11 @@ class OcppServerTest {
     @Test
     fun testStartTransaction() = testApplication {
         application {
-            configureOcppServer()
+            configureTestOcppServer()
         }
 
         val client = createClient {
-            install(WebSockets)
+            install(ClientWebSockets)
         }
 
         client.webSocket("/ocpp/TEST004") {
@@ -173,11 +186,11 @@ class OcppServerTest {
     @Test
     fun testStopTransaction() = testApplication {
         application {
-            configureOcppServer()
+            configureTestOcppServer()
         }
 
         val client = createClient {
-            install(WebSockets)
+            install(ClientWebSockets)
         }
 
         client.webSocket("/ocpp/TEST005") {
@@ -226,11 +239,11 @@ class OcppServerTest {
     @Test
     fun testStatusNotification() = testApplication {
         application {
-            configureOcppServer()
+            configureTestOcppServer()
         }
 
         val client = createClient {
-            install(WebSockets)
+            install(ClientWebSockets)
         }
 
         client.webSocket("/ocpp/TEST006") {
@@ -261,11 +274,11 @@ class OcppServerTest {
     @Test
     fun testMeterValues() = testApplication {
         application {
-            configureOcppServer()
+            configureTestOcppServer()
         }
 
         val client = createClient {
-            install(WebSockets)
+            install(ClientWebSockets)
         }
 
         client.webSocket("/ocpp/TEST007") {
@@ -310,11 +323,11 @@ class OcppServerTest {
     @Test
     fun testUnsupportedAction() = testApplication {
         application {
-            configureOcppServer()
+            configureTestOcppServer()
         }
 
         val client = createClient {
-            install(WebSockets)
+            install(ClientWebSockets)
         }
 
         client.webSocket("/ocpp/TEST008") {
@@ -342,11 +355,11 @@ class OcppServerTest {
     @Test
     fun testInvalidMessageFormat() = testApplication {
         application {
-            configureOcppServer()
+            configureTestOcppServer()
         }
 
         val client = createClient {
-            install(WebSockets)
+            install(ClientWebSockets)
         }
 
         client.webSocket("/ocpp/TEST009") {
@@ -366,11 +379,11 @@ class OcppServerTest {
     @Test
     fun testMultipleChargePoints() = testApplication {
         application {
-            configureOcppServer()
+            configureTestOcppServer()
         }
 
         val client = createClient {
-            install(WebSockets)
+            install(ClientWebSockets)
         }
 
         // Connect two charge points simultaneously
@@ -412,11 +425,11 @@ class OcppServerTest {
     @Test
     fun testDataTransfer() = testApplication {
         application {
-            configureOcppServer()
+            configureTestOcppServer()
         }
 
         val client = createClient {
-            install(WebSockets)
+            install(ClientWebSockets)
         }
 
         client.webSocket("/ocpp/TEST010") {

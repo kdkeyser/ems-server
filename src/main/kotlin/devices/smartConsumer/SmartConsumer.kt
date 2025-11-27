@@ -15,6 +15,6 @@ data class SmartConsumerState(
 
 interface SmartConsumer {
     suspend fun update()
-    val state: DeviceUpdate<SmartConsumerState>?
+    suspend fun getState() : DeviceUpdate<SmartConsumerState>?
     suspend fun setConsumeMode(consumeMode: ConsumeMode)
 }

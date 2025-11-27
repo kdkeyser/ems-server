@@ -1,5 +1,6 @@
 package io.konektis.devices.grid
 
+import io.klogging.Klogging
 import io.konektis.GlobalTimeSource
 import io.konektis.devices.DeviceUpdate
 import io.konektis.devices.Volt
@@ -12,6 +13,8 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -59,14 +62,22 @@ private class P1MeterClient(private val host: String) {
 
 class P1Meter(host: String,
               override val properties: GridProperties
-) : Grid {
+) : Klogging, Grid {
     private val p1MeterClient = P1MeterClient(host)
     private var internalState: DeviceUpdate<GridState>? = null
+    val mutex = Mutex()
 
     override suspend fun update() {
-        internalState = p1MeterClient.update()
+        mutex.withLock {
+            logger.debug { "Updating P1 Meter" }
+            internalState = p1MeterClient.update()
+            logger.debug { "Updated P1 Meter: $internalState" }
+        }
     }
 
-    override val state: DeviceUpdate<GridState>?
-        get() = internalState
+    override suspend fun getState(): DeviceUpdate<GridState>? {
+        mutex.withLock {
+            return internalState
+        }
+    }
 }

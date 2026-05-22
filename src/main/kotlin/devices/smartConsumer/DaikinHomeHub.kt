@@ -62,7 +62,7 @@ private class DaikinHomeHub(private val host: String) : NoCoLogging {
 
     }*/
 
-    fun getState(): SmartConsumerState {
+    suspend fun getState(): SmartConsumerState {
         val result = client.withClient { client ->
             client.readInputRegisters(1, ReadInputRegistersRequest(MODBUS_INPUT_REGISTER_CURRENT_TOTAL_POWER, 1))
         }

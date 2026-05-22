@@ -21,7 +21,7 @@ class SMASolar(private val host: String) : NoCoLogging, Solar {
     // SMA Sunny Boy Modbus: total AC power output, U32, unit W, unit-id 3
     private val MODBUS_INPUT_REGISTER_CURRENT_TOTAL_POWER = 30775
 
-    private fun getSolarState(): SolarState {
+    private suspend fun getSolarState(): SolarState {
         val result = client.withClient { client ->
             client.readInputRegisters(3, ReadInputRegistersRequest(MODBUS_INPUT_REGISTER_CURRENT_TOTAL_POWER, 2))
         }

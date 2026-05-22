@@ -28,28 +28,28 @@ class SMABattery(private val host: String) : Klogging, Battery {
     // Write 802 to enable Modbus power control; write 803 to hand control back to the inverter
     private val MODBUS_OUTPUT_REGISTER_CHARGING_CONTROL = 40151
 
-    private fun getCharge() : ULong {
+    private suspend fun getCharge() : ULong {
         val result = client.withClient { client ->
             client.readInputRegisters(3, ReadInputRegistersRequest(MODBUS_INPUT_REGISTER_BATTERY_CHARGE, 4))
         }
         return Endian.Big.longFrom(result.registers,0).toULong()
     }
 
-    private fun getCurrentCharge() : UInt {
+    private suspend fun getCurrentCharge() : UInt {
         val result = client.withClient { client ->
             client.readInputRegisters(3, ReadInputRegistersRequest(MODBUS_INPUT_REGISTER_CURRENT_BATTERY_CHARGE, 2))
         }
         return Endian.Big.intFrom(result.registers,0).toUInt()
     }
 
-    private fun getCurrentDischarge() : UInt {
+    private suspend fun getCurrentDischarge() : UInt {
         val result = client.withClient { client ->
             client.readInputRegisters(3, ReadInputRegistersRequest(MODBUS_INPUT_REGISTER_CURRENT_BATTERY_DISCHARGE, 2))
         }
         return Endian.Big.intFrom(result.registers,0).toUInt()
     }
 
-    private fun getCapacity() : UInt {
+    private suspend fun getCapacity() : UInt {
         val result = client.withClient { client ->
             client.readInputRegisters(3, ReadInputRegistersRequest(MODBUS_INPUT_REGISTER_CURRENT_BATTERY_CAPACITY, 2))
         }
@@ -93,7 +93,7 @@ class SMABattery(private val host: String) : Klogging, Battery {
         }
     }
 
-    fun getInternalState(): BatteryState {
+    suspend fun getInternalState(): BatteryState {
         val capacity = getCapacity()
         val charge = getCharge()
         val currentCharge = getCurrentCharge()

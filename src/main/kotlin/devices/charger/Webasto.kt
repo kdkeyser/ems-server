@@ -58,7 +58,7 @@ class Webasto(val host: String) : Klogging, Charger {
 
     }
 
-    private fun getCurrentPowerUsage(): Int {
+    private suspend fun getCurrentPowerUsage(): Int {
         val result = client.withClient { client ->
             client.readInputRegisters(1, ReadInputRegistersRequest(MODBUS_REGISTER_CURRENT_TOTAL_POWER, 2))
         }

@@ -3,43 +3,35 @@ package io.konektis
 import com.digitalpetri.modbus.client.ModbusTcpClient
 import com.digitalpetri.modbus.tcp.client.NettyClientTransportConfig
 import com.digitalpetri.modbus.tcp.client.NettyTcpClientTransport
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class ModbusTCPClient(private val host: String) {
 
     private var client = makeClient()
+    private val lock = Any()
 
     private fun makeClient(): ModbusTcpClient {
-        // Use Netty transport for now - Ktor network sockets don't have
-        // a direct compatible interface with the modbus library
+        // Netty transport — Ktor network sockets don't have a compatible interface with the modbus library
         val transport = NettyTcpClientTransport.create { cfg: NettyClientTransportConfig.Builder ->
             cfg.hostname = host
             cfg.port = 502
         }
         val modbusClient = ModbusTcpClient.create(transport)
         modbusClient.connect()
-        return (modbusClient)
+        return modbusClient
     }
 
-    private fun <T> tryUseClient(f: (client: ModbusTcpClient) -> T, retry: Boolean): T {
-        synchronized(client) {
-            if (!client.isConnected) {
-                client.connect()
-            }
+    suspend fun <T> withClient(f: (client: ModbusTcpClient) -> T): T = withContext(Dispatchers.IO) {
+        synchronized(lock) {
+            if (!client.isConnected) client.connect()
             try {
-                return f(client)
+                f(client)
             } catch (e: Exception) {
+                println("[WARN] ModbusTCPClient: connection error for $host, reconnecting: ${e.message}")
                 client = makeClient()
-                if (retry) {
-                    return tryUseClient(f, false)
-                } else {
-                    throw (e)
-                }
+                f(client)
             }
-
         }
-    }
-
-    fun <T> withClient(f: (client: ModbusTcpClient) -> T): T {
-        return tryUseClient(f, true)
     }
 }

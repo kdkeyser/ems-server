@@ -14,9 +14,7 @@ import kotlinx.serialization.json.Json
 fun Application.configureStatusPage(statusFlow: Flow<StatusState?>) {
     routing {
         get("/status") {
-            val bytes = object {}::class.java.getResourceAsStream("/status.html")
-                ?.readBytes()
-                ?: error("status.html not found in classpath")
+            val bytes = object {}::class.java.getResourceAsStream("/status.html")!!.readBytes()
             call.respondBytes(bytes, ContentType.Text.Html)
         }
         webSocket("/status-ws") {

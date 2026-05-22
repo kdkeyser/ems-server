@@ -1,4 +1,3 @@
-// src/main/kotlin/StatusState.kt
 package io.konektis
 
 import kotlinx.serialization.SerialName
@@ -9,15 +8,15 @@ sealed class DeviceHealth {
     @Serializable
     @SerialName("online")
     data class Online(
-        val lastSeenAt: Long,          // epoch milliseconds
+        val lastSeenAt: Long,
         val powerW: Int,
-        val extraInfo: String? = null  // e.g. "62% SoC" for battery
+        val extraInfo: String? = null
     ) : DeviceHealth()
 
     @Serializable
     @SerialName("offline")
     data class Offline(
-        val lastSeenAt: Long? = null,  // null if device was never reached
+        val lastSeenAt: Long? = null,
         val lastError: String? = null
     ) : DeviceHealth()
 }

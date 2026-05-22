@@ -29,8 +29,8 @@ class ModbusTCPClient(private val host: String) {
                 f(client)
             } catch (e: Exception) {
                 println("[WARN] ModbusTCPClient: connection error for $host, reconnecting: ${e.message}")
-                client = makeClient()
-                f(client)
+                try { client = makeClient() } catch (_: Exception) { }
+                throw e
             }
         }
     }

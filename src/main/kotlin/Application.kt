@@ -9,6 +9,8 @@ import io.klogging.rendering.RENDER_SIMPLE
 import io.klogging.sending.STDOUT
 import io.konektis.config.loadConfig
 import io.konektis.devices.World
+import io.konektis.di.AppComponent
+import io.konektis.di.create
 import io.konektis.ems.EMSState
 import io.konektis.ems.EnergyManager
 import io.ktor.server.application.*
@@ -39,13 +41,16 @@ class Main : Klogging {
         val config = loadConfig("/config.yaml")
 
         logger.info(config)
-        val world = World.fromConfig(config)
-        val dataCollector = DataCollector(config.refreshThreads, world)
-        val energyManager = EnergyManager()
+
+        // Create the DI component
+        val component = AppComponent::class.create(config)
+
+        val dataCollector = component.dataCollector
+        val energyManager = component.energyManager
 
         coroutineScope {
             launch {
-                while(true) {
+                while (true) {
                     dataCollector.refresh()
                     delay(5000)
                 }

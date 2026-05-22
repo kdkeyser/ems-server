@@ -6,7 +6,7 @@ ocpp:
 grid:
   type: P1HomeWizard
   gridType: Phase3_230V
-  host: 192.168.129.178
+  host: 192.168.129.17
 
 devices:
   solar:
@@ -19,16 +19,16 @@ devices:
   heatPump:
     - type: DaikinHomeHub
       name: Daikin Altherma 3
-      host: 192.168.129.131
+      host: 192.168.129.12
   charger:
     - type: WebastoUnite
       name: Webasto Unite
-      host: 192.168.129.166
+      host: 192.168.129.19
       chargingCurrent:
         min: 6.0
         max: 32.0
   battery:
     - type: SMA_Sunny_Boy_Storage
       name: Home Battery
-      host: 192.168.129.187
+      host: 192.168.129.18
 

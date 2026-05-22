@@ -69,10 +69,7 @@ class DataCollector(threads: Int, val world: World) : Klogging {
             val batteryKey = world.batteries.keys.firstOrNull()
             val batteryOnline = batteryKey?.let { healthMap[it] as? DeviceHealth.Online }
             val batteryW = batteryOnline?.powerW
-            val batteryCharge = batteryKey
-                ?.let { world.batteries[it] }
-                ?.takeIf { batteryOnline != null }
-                ?.getState()?.update?.charge?.toInt()
+            val batteryCharge = batteryOnline?.extraInfo?.removeSuffix("% SoC")?.toIntOrNull()
             val chargerW = world.chargers.keys.firstOrNull()
                 ?.let { (healthMap[it] as? DeviceHealth.Online)?.powerW }
             val heatpumpW = world.smartConsumers.keys.firstOrNull()

@@ -80,7 +80,7 @@ class EnergyManager(
                 try {
                     charger.setMaxChargerPower(Watt(amps * 230))
                 } catch (e: Exception) {
-                    logger.error("Failed to set charger power: $e")
+                    logger.error("Failed to set charger power", e)
                 }
             }
         }
@@ -89,7 +89,7 @@ class EnergyManager(
                 try {
                     battery.setChargingPower(power)
                 } catch (e: Exception) {
-                    logger.error("Failed to set battery power: $e")
+                    logger.error("Failed to set battery power", e)
                 }
             }
         }
@@ -98,7 +98,7 @@ class EnergyManager(
                 try {
                     consumer.setConsumeMode(consumeMode)
                 } catch (e: Exception) {
-                    logger.error("Failed to set heat pump mode: $e")
+                    logger.error("Failed to set heat pump mode", e)
                 }
             }
         }

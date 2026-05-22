@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.kotlincrypto.bitops.endian.Endian
+import kotlin.time.Duration.Companion.milliseconds
 
 // Webasto Unite requires a keepalive write every <30s to maintain Modbus remote control
 private const val MODBUS_REGISTER_KEEPALIVE: Int = 6000
@@ -40,14 +41,14 @@ class Webasto(val host: String) : Klogging, Charger {
         while (true) {
             try {
                 mutex.withLock {
-                client.withClient { client ->
-                    client.writeSingleRegister(1, WriteSingleRegisterRequest(MODBUS_REGISTER_KEEPALIVE, 1))
-                }
+                    client.withClient { client ->
+                        client.writeSingleRegister(1, WriteSingleRegisterRequest(MODBUS_REGISTER_KEEPALIVE, 1))
+                    }
                 }
             } catch (e: Exception) {
-                logger.error(e)
+                logger.warn("Webasto keepalive failed: ${e.message}")
             }
-            delay(10_000)
+            delay(10_000.milliseconds)
         }
     }
 
@@ -68,9 +69,8 @@ class Webasto(val host: String) : Klogging, Charger {
 
     override suspend fun update() {
         mutex.withLock {
-            logger.debug { "Updating charger Webasto state" }
             internalState = DeviceUpdate(GlobalTimeSource.source.markNow(), ChargerState(Watt(getCurrentPowerUsage())))
-            logger.debug { "Charger updated with state $internalState" }
+            logger.trace { "Webasto: $internalState" }
         }
     }
 

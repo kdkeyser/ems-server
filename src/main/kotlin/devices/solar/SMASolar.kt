@@ -33,9 +33,8 @@ class SMASolar(private val host: String) : NoCoLogging, Solar {
 
     override suspend fun update() {
         mutex.withLock {
-            logger.debug { "Updating SMA Solar" }
-            internalState = DeviceUpdate(GlobalTimeSource.source.markNow(),getSolarState())
-            logger.debug { "Updated SMA Solar: $internalState" }
+            internalState = DeviceUpdate(GlobalTimeSource.source.markNow(), getSolarState())
+            logger.trace { "SMASolar: $internalState" }
         }
     }
 

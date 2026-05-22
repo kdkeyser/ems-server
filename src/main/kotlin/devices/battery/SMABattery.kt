@@ -82,9 +82,8 @@ class SMABattery(private val host: String) : Klogging, Battery {
 
     override suspend fun update() {
         mutex.withLock {
-            logger.debug { "Updating battery state"}
             internalState = DeviceUpdate(GlobalTimeSource.source.markNow(), getInternalState())
-            logger.debug {"Battery updated with state $internalState"}
+            logger.trace { "SMABattery: $internalState" }
         }
     }
 

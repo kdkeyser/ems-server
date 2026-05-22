@@ -69,9 +69,8 @@ class P1Meter(host: String,
 
     override suspend fun update() {
         mutex.withLock {
-            logger.debug { "Updating P1 Meter" }
             internalState = p1MeterClient.update()
-            logger.debug { "Updated P1 Meter: $internalState" }
+            logger.trace { "P1Meter: $internalState" }
         }
     }
 

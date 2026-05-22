@@ -3,10 +3,11 @@ package io.konektis
 import com.digitalpetri.modbus.client.ModbusTcpClient
 import com.digitalpetri.modbus.tcp.client.NettyClientTransportConfig
 import com.digitalpetri.modbus.tcp.client.NettyTcpClientTransport
+import io.klogging.NoCoLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class ModbusTCPClient(private val host: String) {
+class ModbusTCPClient(private val host: String) : NoCoLogging {
 
     private var client = makeClient()
     private val lock = Any()
@@ -28,7 +29,7 @@ class ModbusTCPClient(private val host: String) {
             try {
                 f(client)
             } catch (e: Exception) {
-                println("[WARN] ModbusTCPClient: connection error for $host, reconnecting: ${e.message}")
+                logger.warn("Modbus connection error for $host, reconnecting: ${e.message}")
                 try { client = makeClient() } catch (_: Exception) { }
                 throw e
             }

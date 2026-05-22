@@ -30,12 +30,8 @@ class DaikinHeatpump(private val host: String) : Klogging, SmartConsumer {
 
     override suspend fun update() {
         mutex.withLock {
-            logger.debug { "Updating Daikin Heat Pump"}
-            internalState = DeviceUpdate(
-                GlobalTimeSource.source.markNow(),
-                homeHub.getState()
-            )
-            logger.debug { "Updated Daikin Heat Pump: $internalState"}
+            internalState = DeviceUpdate(GlobalTimeSource.source.markNow(), homeHub.getState())
+            logger.trace { "DaikinHeatpump: $internalState" }
         }
     }
 

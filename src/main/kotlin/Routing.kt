@@ -23,13 +23,10 @@ import org.jetbrains.exposed.sql.*
 import org.slf4j.event.*
 
 fun Application.configureRouting() {
-    val logger = logger("io.konektis.sockets")
     routing {
-
-            get("/") {
-                logger.info("Hello World!")
-                call.respondText("Hello World!")
-            }
+        get("/") {
+            call.respondText("Hello World!")
         }
     }
+}
 

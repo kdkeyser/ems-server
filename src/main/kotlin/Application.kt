@@ -1,7 +1,5 @@
 package io.konektis
 
-import com.sksamuel.hoplite.ConfigLoaderBuilder
-import com.sksamuel.hoplite.addResourceSource
 import io.klogging.Klogging
 import io.klogging.Level
 import io.klogging.config.loggingConfiguration
@@ -9,7 +7,6 @@ import io.klogging.rendering.RENDER_SIMPLE
 import io.klogging.sending.STDOUT
 import io.konektis.config.loadConfig
 import io.konektis.config.WebSocketConfig
-import io.konektis.devices.World
 import io.konektis.di.AppComponent
 import io.konektis.di.create
 import io.konektis.ems.EMSState
@@ -33,7 +30,7 @@ class Main : Klogging {
             sink("stdout", RENDER_SIMPLE, STDOUT)
             logging {
                 fromLoggerBase("io.konektis")
-                fromMinLevel(Level.TRACE) {
+                fromMinLevel(Level.INFO) {
                     toSink("stdout")
                 }
             }
@@ -41,7 +38,17 @@ class Main : Klogging {
 
         val config = loadConfig("/config.yaml")
 
-        logger.info(config)
+        logger.info("EMS server starting")
+        logger.info("Grid: ${config.grid.type} @ ${config.grid.host} (${config.grid.gridType})")
+        if (config.devices.solar.isNotEmpty())
+            logger.info("Solar: ${config.devices.solar.joinToString { "${it.name} @ ${it.host}" }}")
+        if (config.devices.charger.isNotEmpty())
+            logger.info("Chargers: ${config.devices.charger.joinToString { "${it.name} @ ${it.host}" }}")
+        if (config.devices.battery.isNotEmpty())
+            logger.info("Batteries: ${config.devices.battery.joinToString { "${it.name} @ ${it.host}" }}")
+        if (config.devices.heatPump.isNotEmpty())
+            logger.info("Heat pumps: ${config.devices.heatPump.joinToString { "${it.name} @ ${it.host}" }}")
+        logger.info("Refresh interval: 5s, threads: ${config.refreshThreads}")
 
         // Create the DI component
         val component = AppComponent::class.create(config)

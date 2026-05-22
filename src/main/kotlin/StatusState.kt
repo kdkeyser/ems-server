@@ -24,7 +24,8 @@ sealed class DeviceHealth {
 @Serializable
 data class DeviceStatus(
     val name: String,
-    val health: DeviceHealth
+    val health: DeviceHealth,
+    val category: String
 )
 
 @Serializable

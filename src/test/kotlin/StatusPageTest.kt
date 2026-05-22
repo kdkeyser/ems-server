@@ -53,8 +53,8 @@ class StatusPageTest {
     fun `WS slash status-ws sends StatusState JSON when flow emits`() = testApplication {
         val state = StatusState(
             devices = listOf(
-                DeviceStatus("Grid meter", DeviceHealth.Online(1748000000000L, -800)),
-                DeviceStatus("Webasto", DeviceHealth.Offline(null, "Connection refused"))
+                DeviceStatus("Grid meter", DeviceHealth.Online(1748000000000L, -800), "grid"),
+                DeviceStatus("Webasto", DeviceHealth.Offline(null, "Connection refused"), "charger")
             ),
             totalSolarW = null,
             gridW = -800,

@@ -31,6 +31,7 @@ class EnergyManager(
                 val snapshot = buildWorldSnapshot(emsState)
                 if (snapshot == null) {
                     logger.warn("Incomplete device state — skipping optimization tick")
+                    logger.warn("State was $emsState")
                 } else {
                     applyDecisions(strategy.decide(snapshot))
                 }

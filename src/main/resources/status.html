@@ -6,63 +6,106 @@
   <title>EMS Status</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-           background: #111827; color: #e5e7eb; padding: 20px; max-width: 720px; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #111827; color: #e5e7eb;
+      padding: 20px; max-width: 680px; margin: 0 auto;
+    }
     h1 { color: #93c5fd; font-size: 1.2rem; margin-bottom: 16px; }
-    .reconnecting { background: #7c2d12; color: #fed7aa; padding: 8px 12px;
-                    border-radius: 6px; margin-bottom: 12px; font-size: 0.85rem; display: none; }
-    .flow { display: flex; align-items: center; justify-content: center; gap: 14px;
-            background: #1f2937; padding: 16px; border-radius: 8px; margin-bottom: 20px;
-            flex-wrap: wrap; }
-    .flow-item { text-align: center; min-width: 70px; }
-    .flow-label { font-size: 0.72rem; color: #9ca3af; margin-bottom: 2px; }
-    .flow-value { font-size: 1.1rem; font-weight: bold; }
-    .flow-sub { font-size: 0.7rem; color: #6b7280; margin-top: 2px; }
-    .flow-house { background: #374151; padding: 8px 14px; border-radius: 6px; }
-    .flow-arrow { color: #374151; font-size: 1.3rem; padding-bottom: 14px; }
-    .section-label { font-size: 0.7rem; color: #6b7280; text-transform: uppercase;
-                     letter-spacing: 0.06em; margin-bottom: 8px; }
-    .devices { display: flex; flex-wrap: wrap; gap: 10px; }
-    .card { background: #1f2937; border: 1px solid #374151; border-radius: 8px;
-            padding: 10px 14px; min-width: 120px; text-align: center; }
-    .card.online { border-color: #166534; }
-    .card.offline { border-color: #991b1b; }
-    .card-name { display: flex; align-items: center; justify-content: center; gap: 5px;
-                 font-size: 0.78rem; font-weight: 600; margin-bottom: 5px; }
-    .dot { font-size: 0.55rem; }
-    .dot.online { color: #4ade80; }
-    .dot.offline { color: #f87171; }
-    .card-power { font-size: 1rem; font-weight: bold; color: #e5e7eb; }
-    .card-extra { font-size: 0.68rem; color: #9ca3af; margin-top: 2px; }
-    .card-offline { font-size: 0.8rem; color: #f87171; }
-    .footer { margin-top: 14px; font-size: 0.68rem; color: #4b5563;
-              display: flex; justify-content: space-between; }
+    .reconnecting {
+      background: #7c2d12; color: #fed7aa; padding: 8px 12px;
+      border-radius: 6px; margin-bottom: 12px; font-size: 0.85rem; display: none;
+    }
+    .topology {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 5/3;
+      background: #1f2937;
+      border-radius: 12px;
+    }
+    .topo-lines {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none;
+    }
+    .topo-node {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      background: #374151;
+      border: 1.5px solid #4b5563;
+      border-radius: 10px;
+      padding: 8px 12px;
+      text-align: center;
+      min-width: 78px;
+    }
+    .topo-node.house {
+      background: #1e3a5f;
+      border-color: #3b82f6;
+      padding: 12px 18px;
+    }
+    .node-icon  { font-size: 1.5rem; line-height: 1.1; }
+    .node-label { font-size: 0.65rem; color: #9ca3af; margin: 2px 0 4px; }
+    .node-power { font-size: 0.9rem; font-weight: 700; }
+    .node-extra { font-size: 0.62rem; color: #9ca3af; margin-top: 2px; }
+    .node-dots  { display: flex; justify-content: center; gap: 4px; margin-top: 5px; }
+    .hdot { font-size: 0.55rem; }
+    .hdot.online  { color: #4ade80; }
+    .hdot.offline { color: #f87171; }
+    .footer {
+      margin-top: 12px; font-size: 0.68rem; color: #4b5563;
+      display: flex; justify-content: space-between;
+    }
   </style>
 </head>
 <body>
   <h1>⚡ Energy Management System</h1>
   <div class="reconnecting" id="reconnecting">⚠ Reconnecting…</div>
 
-  <div class="flow">
-    <div class="flow-item">
-      <div class="flow-label">☀ Solar</div>
-      <div class="flow-value" id="solar-total" style="color:#fbbf24">—</div>
+  <div class="topology" id="topology">
+    <svg class="topo-lines" id="topo-lines"
+         viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+
+    <div class="topo-node" id="tnode-solar"    style="left:50%;top:14%;display:none">
+      <div class="node-icon">☀️</div>
+      <div class="node-label">Solar</div>
+      <div class="node-power" id="tpow-solar">—</div>
+      <div class="node-dots" id="tdots-solar"></div>
     </div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-item flow-house">
-      <div style="font-size:1.3rem">🏠</div>
-      <div class="flow-label">House</div>
+
+    <div class="topo-node" id="tnode-grid"     style="left:12%;top:50%;display:none">
+      <div class="node-icon">🔌</div>
+      <div class="node-label">Grid</div>
+      <div class="node-power" id="tpow-grid">—</div>
+      <div class="node-dots" id="tdots-grid"></div>
     </div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-item">
-      <div class="flow-label">⚡ Grid</div>
-      <div class="flow-value" id="grid-value">—</div>
-      <div class="flow-sub" id="grid-direction"></div>
+
+    <div class="topo-node house" id="tnode-house" style="left:50%;top:50%">
+      <div class="node-icon">🏠</div>
+      <div class="node-label">House</div>
+    </div>
+
+    <div class="topo-node" id="tnode-battery"  style="left:88%;top:50%;display:none">
+      <div class="node-icon">🔋</div>
+      <div class="node-label">Battery</div>
+      <div class="node-power" id="tpow-battery">—</div>
+      <div class="node-extra" id="textra-battery"></div>
+      <div class="node-dots" id="tdots-battery"></div>
+    </div>
+
+    <div class="topo-node" id="tnode-charger"  style="left:30%;top:84%;display:none">
+      <div class="node-icon">🚗</div>
+      <div class="node-label">Charger</div>
+      <div class="node-power" id="tpow-charger">—</div>
+      <div class="node-dots" id="tdots-charger"></div>
+    </div>
+
+    <div class="topo-node" id="tnode-heatpump" style="left:70%;top:84%;display:none">
+      <div class="node-icon">🌡️</div>
+      <div class="node-label">Heat Pump</div>
+      <div class="node-power" id="tpow-heatpump">—</div>
+      <div class="node-dots" id="tdots-heatpump"></div>
     </div>
   </div>
-
-  <div class="section-label">Devices</div>
-  <div class="devices" id="devices"></div>
 
   <div class="footer">
     <span>Live · WebSocket</span>
@@ -74,45 +117,89 @@
     let attempt = 0;
     let ws;
 
+    // Coordinates matching the inline style left%/top% of each node
+    const NODE_POS = {
+      'tnode-solar':    [50, 14],
+      'tnode-grid':     [12, 50],
+      'tnode-house':    [50, 50],
+      'tnode-battery':  [88, 50],
+      'tnode-charger':  [30, 84],
+      'tnode-heatpump': [70, 84],
+    };
+
     function fmt(w) {
       if (w == null) return '—';
       const a = Math.abs(w);
       return a >= 1000 ? (a / 1000).toFixed(1) + ' kW' : a + ' W';
     }
 
-    function ago(ms) {
-      if (ms == null) return 'never';
-      const s = Math.floor((Date.now() - ms) / 1000);
-      if (s < 60) return s + 's ago';
-      if (s < 3600) return Math.floor(s / 60) + 'm ago';
-      return Math.floor(s / 3600) + 'h ago';
+    function powerColor(w, positiveIsConsumption) {
+      if (w == null || w === 0) return '#9ca3af';
+      return (positiveIsConsumption ? w > 0 : w < 0) ? '#f87171' : '#34d399';
+    }
+
+    function lineColor(w, positiveIsConsumption) {
+      if (w == null || w === 0) return '#4b5563';
+      return (positiveIsConsumption ? w > 0 : w < 0) ? '#f87171' : '#34d399';
+    }
+
+    function updateNode(cat, show, powerW, pic, devices, extra) {
+      const id = 'tnode-' + cat;
+      const node = document.getElementById(id);
+      node.style.display = show ? '' : 'none';
+      if (!show) return;
+
+      const pw = document.getElementById('tpow-' + cat);
+      pw.textContent = fmt(powerW);
+      pw.style.color = powerColor(powerW, pic);
+
+      document.getElementById('tdots-' + cat).innerHTML =
+        devices.map(d => `<span class="hdot ${d.health.type}" title="${d.name}">●</span>`).join('');
+
+      if (extra != null) {
+        const ex = document.getElementById('textra-' + cat);
+        if (ex) ex.textContent = extra;
+      }
+    }
+
+    function drawLines(lines) {
+      const svg = document.getElementById('topo-lines');
+      svg.innerHTML = '';
+      const [hx, hy] = NODE_POS['tnode-house'];
+      for (const { cat, color } of lines) {
+        const el = document.getElementById('tnode-' + cat);
+        if (!el || el.style.display === 'none') continue;
+        const [x, y] = NODE_POS['tnode-' + cat];
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', x);  line.setAttribute('y1', y);
+        line.setAttribute('x2', hx); line.setAttribute('y2', hy);
+        line.setAttribute('stroke', color);
+        line.setAttribute('stroke-width', '0.8');
+        line.setAttribute('stroke-linecap', 'round');
+        svg.appendChild(line);
+      }
     }
 
     function render(s) {
-      document.getElementById('solar-total').textContent = fmt(s.totalSolarW);
-
-      const gv = document.getElementById('grid-value');
-      const gd = document.getElementById('grid-direction');
-      if (s.gridW != null) {
-        gv.textContent = fmt(s.gridW);
-        if (s.gridW < 0) { gv.style.color = '#34d399'; gd.textContent = 'exporting'; }
-        else if (s.gridW > 0) { gv.style.color = '#f87171'; gd.textContent = 'importing'; }
-        else { gv.style.color = '#e5e7eb'; gd.textContent = 'balanced'; }
-      } else {
-        gv.textContent = '—'; gv.style.color = '#e5e7eb'; gd.textContent = '';
+      const cats = {};
+      for (const d of s.devices) {
+        (cats[d.category] = cats[d.category] || []).push(d);
       }
 
-      document.getElementById('devices').innerHTML = s.devices.map(d => {
-        const on = d.health.type === 'online';
-        const body = on
-          ? `<div class="card-power">${fmt(d.health.powerW)}</div>`
-            + (d.health.extraInfo ? `<div class="card-extra">${d.health.extraInfo}</div>` : '')
-          : `<div class="card-offline">offline</div>`
-            + `<div class="card-extra">last seen ${ago(d.health.lastSeenAt)}</div>`;
-        return `<div class="card ${on ? 'online' : 'offline'}">
-          <div class="card-name"><span class="dot ${on ? 'online' : 'offline'}">●</span>${d.name}</div>
-          ${body}</div>`;
-      }).join('');
+      updateNode('solar',    !!cats.solar,    s.totalSolarW, false, cats.solar    || [], null);
+      updateNode('grid',     !!cats.grid,     s.gridW,       true,  cats.grid     || [], null);
+      updateNode('battery',  !!cats.battery,  s.batteryW,    true,  cats.battery  || [],
+        s.batteryCharge != null ? s.batteryCharge + '% SoC' : null);
+      updateNode('charger',  !!cats.charger,  s.chargerW,    true,  cats.charger  || [], null);
+      updateNode('heatpump', !!cats.heatpump, s.heatpumpW,   true,  cats.heatpump || [], null);
+
+      drawLines([
+        { cat: 'solar',    color: lineColor(s.totalSolarW, false) },
+        { cat: 'grid',     color: lineColor(s.gridW,       true)  },
+        { cat: 'battery',  color: lineColor(s.batteryW,    true)  },
+        { cat: 'charger',  color: lineColor(s.chargerW,    true)  },
+        { cat: 'heatpump', color: lineColor(s.heatpumpW,   true)  },
+      ]);
 
       document.getElementById('last-update').textContent =
         'updated ' + new Date().toLocaleTimeString();

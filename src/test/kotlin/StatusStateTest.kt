@@ -37,8 +37,8 @@ class StatusStateTest {
     fun `StatusState with mixed online and offline devices round-trips through JSON`() {
         val state = StatusState(
             devices = listOf(
-                DeviceStatus("Grid meter", DeviceHealth.Online(1748000000000L, -800)),
-                DeviceStatus("Webasto", DeviceHealth.Offline(null, "Connection refused"))
+                DeviceStatus("Grid meter", DeviceHealth.Online(1748000000000L, -800), "grid"),
+                DeviceStatus("Webasto", DeviceHealth.Offline(null, "Connection refused"), "charger")
             ),
             totalSolarW = 3400,
             gridW = -800,

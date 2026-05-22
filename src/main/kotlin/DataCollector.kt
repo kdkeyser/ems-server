@@ -20,28 +20,28 @@ class DataCollector(threads: Int, val world: World) : Klogging {
     suspend fun refresh() {
         withContext(dispatcher) {
             val jobs = mutableListOf(
-                async { poll("Grid meter") {
+                async { poll("Grid meter", "grid") {
                     world.grid.update()
                     val state = world.grid.getState() ?: throw Exception("Grid meter returned no data")
                     DeviceHealth.Online(System.currentTimeMillis(), state.update.power.value)
                 }}
             )
             world.solar.forEach { (name, solar) ->
-                jobs.add(async { poll(name) {
+                jobs.add(async { poll(name, "solar") {
                     solar.update()
                     val state = solar.getState() ?: throw Exception("$name returned no data")
                     DeviceHealth.Online(System.currentTimeMillis(), state.update.power.value)
                 }})
             }
             world.chargers.forEach { (name, charger) ->
-                jobs.add(async { poll(name) {
+                jobs.add(async { poll(name, "charger") {
                     charger.update()
                     val state = charger.getState() ?: throw Exception("$name returned no data")
                     DeviceHealth.Online(System.currentTimeMillis(), state.update.currentPower.value)
                 }})
             }
             world.batteries.forEach { (name, battery) ->
-                jobs.add(async { poll(name) {
+                jobs.add(async { poll(name, "battery") {
                     battery.update()
                     val state = battery.getState() ?: throw Exception("$name returned no data")
                     DeviceHealth.Online(
@@ -52,7 +52,7 @@ class DataCollector(threads: Int, val world: World) : Klogging {
                 }})
             }
             world.smartConsumers.forEach { (name, consumer) ->
-                jobs.add(async { poll(name) {
+                jobs.add(async { poll(name, "heatpump") {
                     consumer.update()
                     val state = consumer.getState() ?: throw Exception("$name returned no data")
                     DeviceHealth.Online(System.currentTimeMillis(), state.update.power.value)
@@ -93,15 +93,15 @@ class DataCollector(threads: Int, val world: World) : Klogging {
         null -> null
     }
 
-    private suspend fun poll(name: String, block: suspend () -> DeviceHealth.Online): DeviceStatus {
+    private suspend fun poll(name: String, category: String, block: suspend () -> DeviceHealth.Online): DeviceStatus {
         return try {
             val health = block()
             healthMap[name] = health
-            DeviceStatus(name, health)
+            DeviceStatus(name, health, category)
         } catch (e: Exception) {
             val health = DeviceHealth.Offline(previousLastSeen(name), e.message)
             healthMap[name] = health
-            DeviceStatus(name, health)
+            DeviceStatus(name, health, category)
         }
     }
 }

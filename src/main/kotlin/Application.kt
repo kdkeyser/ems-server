@@ -30,7 +30,7 @@ class Main : Klogging {
             sink("stdout", RENDER_SIMPLE, STDOUT)
             logging {
                 fromLoggerBase("io.konektis")
-                fromMinLevel(Level.INFO) {
+                fromMinLevel(Level.TRACE) {
                     toSink("stdout")
                 }
             }

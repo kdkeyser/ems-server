@@ -59,7 +59,7 @@ class Main : Klogging {
             launch { energyManager.run() }
             launch {
                 val server = embeddedServer(Netty, port = 8080) {
-                    module(energyManager.emsStateFlow, config.websocket)
+                    module(energyManager.emsStateFlow, config.websocket, dataCollector.statusStateFlow)
                 }
                 server.start(wait = true)
             }
@@ -68,10 +68,11 @@ class Main : Klogging {
     }
 }
 
-fun Application.module(emsStateFlow: Flow<EMSState>, wsConfig: WebSocketConfig) {
+fun Application.module(emsStateFlow: Flow<EMSState>, wsConfig: WebSocketConfig, statusFlow: Flow<StatusState?>) {
     configureSecurity()
     configureAdministration()
     configureSockets(emsStateFlow, wsConfig)
+    configureStatusPage(statusFlow)
     configureOcppServer()
     configureDatabases()
     configureMonitoring()

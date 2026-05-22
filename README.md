@@ -1,49 +1,86 @@
-# ems-server
+# EMS Server
 
-This project was created using the [Ktor Project Generator](https://start.ktor.io).
+A locally-running home energy management system that optimises power distribution
+between solar panels, a home battery, a car charger, and a heat pump in real time.
 
-Here are some useful links to get you started:
+## Hardware
 
-- [Ktor Documentation](https://ktor.io/docs/home.html)
-- [Ktor GitHub page](https://github.com/ktorio/ktor)
-- The [Ktor Slack chat](https://app.slack.com/client/T09229ZC6/C0A974TJ9). You'll need to [request an invite](https://surveys.jetbrains.com/s3/kotlin-slack-sign-up) to join.
+| Device | Model | Protocol |
+|--------|-------|----------|
+| Smart grid meter | HomeWizard P1 | HTTP |
+| Solar inverters (×2) | SMA Sunny Boy | Modbus TCP |
+| Home battery | SMA Sunny Boy Storage | Modbus TCP |
+| Car charger | Webasto Unite | Modbus TCP |
+| Heat pump | Daikin Altherma 3 (HomeHub) | Modbus TCP |
 
-## Features
+## Prerequisites
 
-Here's a list of features included in this project:
+- JDK 17+
+- Gradle (wrapper included)
+- All devices reachable on the local network (see `config.yaml` for IPs)
 
-| Name                                                                   | Description                                                                        |
-| ------------------------------------------------------------------------|------------------------------------------------------------------------------------ |
-| [Routing](https://start.ktor.io/p/routing)                             | Provides a structured routing DSL                                                  |
-| [Content Negotiation](https://start.ktor.io/p/content-negotiation)     | Provides automatic content conversion according to Content-Type and Accept headers |
-| [kotlinx.serialization](https://start.ktor.io/p/kotlinx-serialization) | Handles JSON serialization using kotlinx.serialization library                     |
-| [Authentication](https://start.ktor.io/p/auth)                         | Provides extension point for handling the Authorization header                     |
-| [Rate Limiting](https://start.ktor.io/p/ktor-server-rate-limiting)     | Manage request rate limiting as you see fit                                        |
-| [WebSockets](https://start.ktor.io/p/ktor-websockets)                  | Adds WebSocket protocol support for bidirectional client connections               |
-| [Exposed](https://start.ktor.io/p/exposed)                             | Adds Exposed database to your application                                          |
-| [Call Logging](https://start.ktor.io/p/call-logging)                   | Logs client requests                                                               |
-| [Sessions](https://start.ktor.io/p/ktor-sessions)                      | Adds support for persistent sessions through cookies or headers                    |
-| [Authentication JWT](https://start.ktor.io/p/auth-jwt)                 | Handles JSON Web Token (JWT) bearer authentication scheme                          |
-| [Default Headers](https://start.ktor.io/p/default-headers)             | Adds a default set of headers to HTTP responses                                    |
+## Configuration
 
-## Building & Running
+Edit `src/main/resources/config.yaml`. Key fields:
 
-To build or run the project, use one of the following tasks:
+```yaml
+grid:
+  type: P1HomeWizard
+  gridType: Phase3_230V   # Phase1 | Phase3_230V | Phase3_400V
+  host: 192.168.x.x
 
-| Task                                    | Description                                                          |
-| -----------------------------------------|---------------------------------------------------------------------- |
-| `./gradlew test`                        | Run the tests                                                        |
-| `./gradlew build`                       | Build everything                                                     |
-| `./gradlew buildFatJar`                 | Build an executable JAR of the server with all dependencies included |
-| `./gradlew buildImage`                  | Build the docker image to use with the fat JAR                       |
-| `./gradlew publishImageToLocalRegistry` | Publish the docker image locally                                     |
-| `./gradlew run`                         | Run the server                                                       |
-| `./gradlew runDocker`                   | Run using the local docker image                                     |
+websocket:
+  username: user
+  password: password
 
-If the server starts successfully, you'll see the following output:
-
+devices:
+  solar:
+    - type: SMA_Sunny_Boy
+      name: Sunny Boy 4
+      host: 192.168.x.x
+  battery:
+    - type: SMA_Sunny_Boy_Storage
+      name: Home Battery
+      host: 192.168.x.x
+  charger:
+    - type: WebastoUnite
+      name: Webasto Unite
+      host: 192.168.x.x
+      chargingCurrent:
+        min: 6.0    # minimum amps before charger stops instead of running inefficiently
+        max: 32.0
+  heatPump:
+    - type: DaikinHomeHub
+      name: Daikin Altherma 3
+      host: 192.168.x.x
 ```
-2024-12-04 14:32:45.584 [main] INFO  Application - Application started in 0.303 seconds.
-2024-12-04 14:32:45.682 [main] INFO  Application - Responding at http://0.0.0.0:8080
+
+## Build & Run
+
+```bash
+./gradlew build     # compile and run tests
+./gradlew run       # start the server on port 8080
 ```
 
+## API
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Health check |
+| `WS /ws` | Live power data stream. Send `{"type":"Authenticate","username":"…","password":"…"}` first, then receive `PowerUsageUpdate` messages. |
+| `WS /ocpp/{id}` | OCPP 1.6J endpoint for charge points |
+| `WS /ocpp/1.6/{id}` | OCPP 1.6J endpoint (alternate path) |
+
+## Optimisation Strategy
+
+The default `SurplusPriorityStrategy` allocates surplus solar power in this order:
+
+1. **Heat pump** — unrestricted when surplus available; throttled on deficit
+2. **Car charger** — receives remaining surplus, clamped to configured `[min, max]` amps
+3. **Battery** — charges with any remaining surplus; discharges to cover deficit
+
+## Architecture
+
+See `docs/architecture.md` for the data flow diagram and component overview.
+See `docs/superpowers/specs/2026-05-22-ems-documentation-and-optimization-design.md` for the
+full design spec including pre-refactor issue list.

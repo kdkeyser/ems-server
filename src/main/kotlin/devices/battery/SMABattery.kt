@@ -56,11 +56,12 @@ class SMABattery(private val host: String) : Klogging, Battery {
         return Endian.Big.intFrom(result.registers,0).toUInt()
     }
 
-    suspend fun setChargingPower(power : Watt) {
+    override suspend fun setChargingPower(power : Watt) {
         mutex.withLock {
             val result = client.withClient { client ->
                 val bytes = ByteArray(4)
-                Endian.Big.pack(801, bytes, 0)
+                // 802 enables Modbus power control; 803 disables it (returns control to inverter)
+                Endian.Big.pack(802, bytes, 0)
                 client.writeMultipleRegisters(
                     3,
                     WriteMultipleRegistersRequest(MODBUS_OUTPUT_REGISTER_CHARGING_CONTROL, 2, bytes)
@@ -94,13 +95,10 @@ class SMABattery(private val host: String) : Klogging, Battery {
     }
 
     suspend fun getInternalState(): BatteryState {
-        val capacity = getCapacity()
-        val charge = getCharge()
-        val currentCharge = getCurrentCharge()
-        val currentDischarge = getCurrentDischarge()
-
-        println("Capacity: $capacity, Charge: $charge, CurrentCharge: $currentCharge, CurrentDischarge: $currentDischarge")
-
-        return BatteryState(0u, Watt(0))
+        val soc = getCapacity()                          // SoC percent (0-100) from register 30845
+        val charging = getCurrentCharge()                // charging power W from register 31393
+        val discharging = getCurrentDischarge()          // discharging power W from register 31395
+        val netPower = charging.toInt() - discharging.toInt()
+        return BatteryState(soc.toUShort(), Watt(netPower))
     }
 }

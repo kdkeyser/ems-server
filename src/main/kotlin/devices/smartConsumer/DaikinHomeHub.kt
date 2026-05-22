@@ -1,6 +1,7 @@
 package io.konektis.devices.Heatpump
 
 import com.digitalpetri.modbus.pdu.ReadInputRegistersRequest
+import com.digitalpetri.modbus.pdu.WriteSingleRegisterRequest
 import io.klogging.Klogging
 import io.klogging.NoCoLogging
 import io.konektis.GlobalTimeSource
@@ -45,7 +46,9 @@ class DaikinHeatpump(private val host: String) : Klogging, SmartConsumer {
     }
 
     override suspend fun setConsumeMode(consumeMode: ConsumeMode) {
-        TODO("Not yet implemented")
+        mutex.withLock {
+            homeHub.setConsumeMode(consumeMode)
+        }
     }
 
 }
@@ -69,5 +72,20 @@ private class DaikinHomeHub(private val host: String) : NoCoLogging {
 
         val usage = Endian.Big.shortFrom(result.registers, 0) * 10
         return SmartConsumerState(Watt(usage), ConsumeMode.Unrestricted)
+    }
+
+    suspend fun setConsumeMode(consumeMode: ConsumeMode) {
+        val (mode, maxPower) = when (consumeMode) {
+            is ConsumeMode.Unrestricted -> Pair(0, 0)
+            is ConsumeMode.SuggestConsumeUpTo -> Pair(1, consumeMode.power.value)
+        }
+        client.withClient { c ->
+            c.writeSingleRegister(1, WriteSingleRegisterRequest(MODBUS_HOLDING_REGISTER_SMART_GRID, mode))
+        }
+        if (maxPower > 0) {
+            client.withClient { c ->
+                c.writeSingleRegister(1, WriteSingleRegisterRequest(MODBUS_HOLDING_REGISTER_SMART_GRID_MAX_POWER, maxPower))
+            }
+        }
     }
 }

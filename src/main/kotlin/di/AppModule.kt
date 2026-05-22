@@ -4,6 +4,8 @@ import io.konektis.DataCollector
 import io.konektis.config.Config
 import io.konektis.devices.World
 import io.konektis.ems.EnergyManager
+import io.konektis.ems.Strategy
+import io.konektis.ems.SurplusPriorityStrategy
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
@@ -37,5 +39,9 @@ interface AppModule {
         DataCollector(config.refreshThreads, world)
 
     @Provides
-    fun provideEnergyManager(world: World, config: Config): EnergyManager = EnergyManager(world, config)
+    fun provideStrategy(): Strategy = SurplusPriorityStrategy()
+
+    @Provides
+    fun provideEnergyManager(world: World, config: Config, strategy: Strategy): EnergyManager =
+        EnergyManager(world, config, strategy)
 }

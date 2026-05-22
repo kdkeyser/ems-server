@@ -31,6 +31,7 @@ interface AppModule {
         }
     }
 
+    @ApplicationScope
     @Provides
     fun provideWorld(config: Config): World = World.fromConfig(config)
 

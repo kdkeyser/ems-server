@@ -8,6 +8,7 @@ import io.ktor.client.HttpClient
 import me.tatarka.inject.annotations.Component
 import me.tatarka.inject.annotations.Provides
 
+@ApplicationScope
 @Component
 abstract class AppComponent(
     @get:Provides val config: Config

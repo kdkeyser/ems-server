@@ -8,6 +8,7 @@ import io.klogging.config.loggingConfiguration
 import io.klogging.rendering.RENDER_SIMPLE
 import io.klogging.sending.STDOUT
 import io.konektis.config.loadConfig
+import io.konektis.config.WebSocketConfig
 import io.konektis.devices.World
 import io.konektis.di.AppComponent
 import io.konektis.di.create
@@ -58,7 +59,7 @@ class Main : Klogging {
             //launch { energyManager.run(config) }
             launch {
                 val server = embeddedServer(Netty, port = 8080) {
-                    module(energyManager.emsStateFlow)
+                    module(energyManager.emsStateFlow, config.websocket)
                 }
                 server.start(wait = true)
             }
@@ -67,10 +68,10 @@ class Main : Klogging {
     }
 }
 
-fun Application.module(emsStateFlow: Flow<EMSState>) {
+fun Application.module(emsStateFlow: Flow<EMSState>, wsConfig: WebSocketConfig) {
     configureSecurity()
     configureAdministration()
-    configureSockets(emsStateFlow)
+    configureSockets(emsStateFlow, wsConfig)
     configureOcppServer()
     configureDatabases()
     configureMonitoring()

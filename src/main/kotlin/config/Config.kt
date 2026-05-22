@@ -61,10 +61,14 @@ data class Devices(
 data class OcppConfig(val enabled: Boolean, val heartbeatInterval: Int, val connectionTimeout: Int)
 
 @Serializable
+data class WebSocketConfig(val username: String, val password: String)
+
+@Serializable
 data class Config(
     val grid: Grid,
     val devices: Devices,
     val ocpp: OcppConfig,
+    val websocket: WebSocketConfig = WebSocketConfig("user", "password"),
     val refreshThreads : Int = 50
 )
 

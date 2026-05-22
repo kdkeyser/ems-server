@@ -10,9 +10,10 @@ import kotlinx.serialization.json.Json
 import kotlin.time.Duration.Companion.seconds
 import io.klogging.logger
 import io.konektis.ems.EMSState
+import io.konektis.config.WebSocketConfig
 import kotlinx.coroutines.flow.Flow
 
-fun Application.configureSockets(emsStateFlow: Flow<EMSState>) {
+fun Application.configureSockets(emsStateFlow: Flow<EMSState>, wsConfig: WebSocketConfig) {
     install(WebSockets) {
         pingPeriod = 30.seconds
         timeout = 30.seconds
@@ -58,7 +59,7 @@ fun Application.configureSockets(emsStateFlow: Flow<EMSState>) {
                     try {
                         when (val message = deserializeClientMessage(text)) {
                             is ClientMessage.Authenticate -> {
-                                if (message.username == "user" && message.password == "password") {
+                                if (message.username == wsConfig.username && message.password == wsConfig.password) {
                                     authenticated = true
                                     send(Json.encodeToString(Message.Authenticated(message.username) as Message))
                                 } else {

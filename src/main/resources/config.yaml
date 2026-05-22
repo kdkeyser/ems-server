@@ -3,6 +3,10 @@ ocpp:
   heartbeatInterval: 300
   connectionTimeout: 60
 
+websocket:
+  username: user
+  password: password
+
 grid:
   type: P1HomeWizard
   gridType: Phase3_230V

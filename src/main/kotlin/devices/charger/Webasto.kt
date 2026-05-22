@@ -8,12 +8,14 @@ import io.konektis.GlobalTimeSource
 import io.konektis.ModbusTCPClient
 import io.konektis.devices.DeviceUpdate
 import io.konektis.devices.Watt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.kotlincrypto.bitops.endian.Endian
-import kotlin.concurrent.thread
 
 // Webasto Unite requires a keepalive write every <30s to maintain Modbus remote control
 private const val MODBUS_REGISTER_KEEPALIVE: Int = 6000
@@ -28,12 +30,11 @@ class Webasto(val host: String) : Klogging, Charger {
     private val mutex = Mutex()
     private var internalState : DeviceUpdate<ChargerState>? = null
 
-    private val thread =
-        thread {
-            runBlocking {
-                keepAliveLoop()
-            }
-        }
+    private val keepAliveScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    init {
+        keepAliveScope.launch { keepAliveLoop() }
+    }
 
     private suspend fun keepAliveLoop() {
         while (true) {

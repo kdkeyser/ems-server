@@ -15,8 +15,11 @@ import kotlinx.coroutines.sync.withLock
 import org.kotlincrypto.bitops.endian.Endian
 import kotlin.concurrent.thread
 
+// Webasto Unite requires a keepalive write every <30s to maintain Modbus remote control
 private const val MODBUS_REGISTER_KEEPALIVE: Int = 6000
+// Maximum charging current in amps (write to set; Webasto clamps to its own max of 32A)
 private const val MODBUS_REGISTER_MAX_CURRENT_CHARGING: Int = 5004
+// Current total power draw by the charger, W (read-only)
 private const val MODBUS_REGISTER_CURRENT_TOTAL_POWER: Int = 1020
 
 class Webasto(val host: String) : Klogging, Charger {

@@ -15,12 +15,18 @@ class SMABattery(private val host: String) : Klogging, Battery {
     private var internalState : DeviceUpdate<BatteryState>? = null
     private val mutex = Mutex()
 
+    // State of charge percentage (0-100), U32, unit-id 3. Verify scaling against SMA docs.
     private val MODBUS_INPUT_REGISTER_CURRENT_BATTERY_CAPACITY = 30845
-    private val MODBUS_INPUT_REGISTER_BATTERY_CHARGE = 31397 // Total energy charged to the battery over its lifetime, in Wh
-    private val MODBUS_INPUT_REGISTER_CURRENT_BATTERY_CHARGE = 31393 // current power that is charging the battery, in W
-    private val MODBUS_INPUT_REGISTER_CURRENT_BATTERY_DISCHARGE = 31395 // current power that is discharging the battery, in W
-    private val MODBUS_OUTPUT_REGISTER_CHARGING_POWER = 40149 // s32, write-only. Power in Watt. Negative means discharge the battery, positive means charge. Only works when the next register is set to the correct value.
-    private val MODBUS_OUTPUT_REGISTER_CHARGING_CONTROL = 40151 // u32, write-only. Setting to 802 allows modbus control of the charge/discharge power, 803 disallows it.
+    // Total energy charged to battery over its lifetime, Wh (not SoC — do not use for charge %)
+    private val MODBUS_INPUT_REGISTER_BATTERY_CHARGE = 31397
+    // Current charging power into battery, W, U32
+    private val MODBUS_INPUT_REGISTER_CURRENT_BATTERY_CHARGE = 31393
+    // Current discharging power from battery, W, U32
+    private val MODBUS_INPUT_REGISTER_CURRENT_BATTERY_DISCHARGE = 31395
+    // Target charge/discharge power, S32 (positive=charge, negative=discharge), W
+    private val MODBUS_OUTPUT_REGISTER_CHARGING_POWER = 40149
+    // Write 802 to enable Modbus power control; write 803 to hand control back to the inverter
+    private val MODBUS_OUTPUT_REGISTER_CHARGING_CONTROL = 40151
 
     private fun getCharge() : ULong {
         val result = client.withClient { client ->

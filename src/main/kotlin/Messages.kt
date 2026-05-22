@@ -26,7 +26,7 @@ enum class Devices {
 }
 
 @Serializable
-// negative power means producing power, positive means consuming
+// power: negative = producing/exporting, positive = consuming/importing
 data class Update(val device: Devices, val power: Int)
 
 @Serializable

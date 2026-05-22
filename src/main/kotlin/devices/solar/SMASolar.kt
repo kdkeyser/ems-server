@@ -18,6 +18,7 @@ class SMASolar(private val host: String) : NoCoLogging, Solar {
     private val mutex = Mutex()
 
 
+    // SMA Sunny Boy Modbus: total AC power output, U32, unit W, unit-id 3
     private val MODBUS_INPUT_REGISTER_CURRENT_TOTAL_POWER = 30775
 
     private fun getSolarState(): SolarState {
@@ -26,8 +27,7 @@ class SMASolar(private val host: String) : NoCoLogging, Solar {
         }
         val data = result.registers
         val power = Endian.Big.intFrom(result.registers,0)
-        // if the SMA PV Inverter is turned off (e.g. because there is no sunlight), the returned Modbus value is NaN, which
-        // is the smallest negative number.
+        // SMA returns Int.MIN_VALUE when the inverter is off (no sunlight); treat as 0W
         return SolarState(Watt(if (power > 0) power else 0 ))
     }
 

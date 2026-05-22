@@ -14,8 +14,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.kotlincrypto.bitops.endian.Endian
 
+// Current total heat pump power consumption, unit 10W (multiply raw value by 10 for W)
 private const val MODBUS_INPUT_REGISTER_CURRENT_TOTAL_POWER: Int = 50
+// SG-Ready mode: 0=normal, 1=lock (min operation), 2=recommended, 3=max operation
 private const val MODBUS_HOLDING_REGISTER_SMART_GRID: Int = 55
+// Maximum power suggestion to heat pump when in SG-Ready mode, W
 private const val MODBUS_HOLDING_REGISTER_SMART_GRID_MAX_POWER: Int = 56
 
 class DaikinHeatpump(private val host: String) : Klogging, SmartConsumer {

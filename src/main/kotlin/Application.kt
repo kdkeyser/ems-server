@@ -56,7 +56,7 @@ class Main : Klogging {
                     delay(5000)
                 }
             }
-            //launch { energyManager.run(config) }
+            launch { energyManager.run() }
             launch {
                 val server = embeddedServer(Netty, port = 8080) {
                     module(energyManager.emsStateFlow, config.websocket)

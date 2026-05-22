@@ -37,5 +37,5 @@ interface AppModule {
         DataCollector(config.refreshThreads, world)
 
     @Provides
-    fun provideEnergyManager(): EnergyManager = EnergyManager()
+    fun provideEnergyManager(world: World, config: Config): EnergyManager = EnergyManager(world, config)
 }

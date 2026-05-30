@@ -7,7 +7,12 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,25 +35,25 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 
-// Fractional icon-CENTER positions within the diagram box.
+// Fractional tile-CENTER positions within the diagram box.
 // Grid – House – Battery share one horizontal row; Solar sits above House.
-private const val SOLAR_X = 0.50f;   private const val SOLAR_Y = 0.16f
-private const val HOUSE_X = 0.50f;   private const val ROW_Y = 0.66f
-private const val GRID_X = 0.16f
-private const val BATTERY_X = 0.84f
+private const val SOLAR_X = 0.50f;   private const val SOLAR_Y = 0.18f
+private const val HOUSE_X = 0.50f;   private const val ROW_Y = 0.64f
+private const val GRID_X = 0.17f
+private const val BATTERY_X = 0.83f
 
-private val NODE_TILE = 52.dp
-private val HOUSE_TILE = 66.dp
-private val LABEL_WIDTH = 120.dp
-private val LABEL_GAP = 4.dp        // icon edge → start of its label block
-private val LABEL_BLOCK = 36.dp     // caption + value stacked
-private val EDGE_GAP = 6.dp         // gap between an arrow end and an icon edge
+// Rounded tile holds icon + name. House is a touch larger.
+private val NODE_W = 86.dp;  private val NODE_H = 74.dp
+private val HOUSE_W = 96.dp; private val HOUSE_H = 82.dp
+private val VALUE_BLOCK = 22.dp   // power value text below the tile
+private val LABEL_GAP = 4.dp      // tile bottom → power value
+private val EDGE_GAP = 8.dp       // gap between an arrow end and a tile
 
 /**
- * SMA-style energy flow. Each node stacks icon → label → power value (all below the
- * icon). Arrows are thin, solid, color-coded and connect icon-center to icon-center,
- * inset to the tile edge. The solar arrow starts below solar's value text so it never
- * clips the label.
+ * SMA-style energy flow. Each node is a rounded tile containing its icon + name,
+ * with the power value shown below the tile. Arrows are thin solid lines with a
+ * filled triangle tip, connecting tile centers and inset clear of the tiles (and,
+ * for the vertical solar arrow, clear of solar's value text).
  */
 @Composable
 fun EnergyFlowDiagram(state: StatusState?, modifier: Modifier = Modifier) {
@@ -76,100 +81,119 @@ fun EnergyFlowDiagram(state: StatusState?, modifier: Modifier = Modifier) {
             val house = Offset(HOUSE_X * w, ROW_Y * h)
             val grid = Offset(GRID_X * w, ROW_Y * h)
             val battery = Offset(BATTERY_X * w, ROW_Y * h)
-            val rNode = NODE_TILE.toPx() / 2f + EDGE_GAP.toPx()
-            val rHouse = HOUSE_TILE.toPx() / 2f + EDGE_GAP.toPx()
-            // Solar's arrow begins below its value text, not at the tile edge.
-            val rSolarStart = NODE_TILE.toPx() / 2f + LABEL_GAP.toPx() + LABEL_BLOCK.toPx() + EDGE_GAP.toPx()
-            drawFlow(solar, house, solarDir, solarColor, rSolarStart, rHouse)
-            drawFlow(grid, house, gridDir, gridColor, rNode, rHouse)
-            drawFlow(house, battery, batteryDir, batteryColor, rHouse, rNode)
+
+            val nodeHalfH = NODE_H.toPx() / 2f
+            val nodeHalfW = NODE_W.toPx() / 2f
+            val houseHalfH = HOUSE_H.toPx() / 2f
+            val houseHalfW = HOUSE_W.toPx() / 2f
+            val gap = EDGE_GAP.toPx()
+            val valueBlock = VALUE_BLOCK.toPx() + LABEL_GAP.toPx()
+
+            // Solar arrow is vertical: start below solar's value text, end above house tile.
+            drawFlow(solar, house, solarDir, solarColor,
+                fromRadius = nodeHalfH + valueBlock + gap, toRadius = houseHalfH + gap)
+            // Grid/Battery arrows are horizontal: inset by tile half-widths.
+            drawFlow(grid, house, gridDir, gridColor,
+                fromRadius = nodeHalfW + gap, toRadius = houseHalfW + gap)
+            drawFlow(house, battery, batteryDir, batteryColor,
+                fromRadius = houseHalfW + gap, toRadius = nodeHalfW + gap)
         }
 
-        // Icon tiles — each centered exactly on its anchor.
-        IconNode(EmsIcons.Solar, NODE_TILE, ems.tileBg, SOLAR_X, SOLAR_Y, wDp, hDp)
-        IconNode(EmsIcons.House, HOUSE_TILE, ems.houseTileBg, HOUSE_X, ROW_Y, wDp, hDp)
-        IconNode(EmsIcons.Grid, NODE_TILE, ems.tileBg, GRID_X, ROW_Y, wDp, hDp)
-        IconNode(EmsIcons.Battery, NODE_TILE, ems.tileBg, BATTERY_X, ROW_Y, wDp, hDp)
+        // Tiles (icon + name inside) centered on their anchors.
+        NodeTile(EmsIcons.Solar, "Solar", NODE_W, NODE_H, ems.tileBg, SOLAR_X, SOLAR_Y, wDp, hDp)
+        NodeTile(EmsIcons.House, "Home", HOUSE_W, HOUSE_H, ems.houseTileBg, HOUSE_X, ROW_Y, wDp, hDp)
+        NodeTile(EmsIcons.Grid,
+            if ((state?.gridW ?: 0) < 0) "Grid · export" else "Grid · import",
+            NODE_W, NODE_H, ems.tileBg, GRID_X, ROW_Y, wDp, hDp)
+        NodeTile(EmsIcons.Battery,
+            state?.batteryCharge?.let { "Battery · $it%" } ?: "Battery",
+            NODE_W, NODE_H, ems.tileBg, BATTERY_X, ROW_Y, wDp, hDp)
 
-        // Labels — all below their icon: caption first, then the power value.
-        Label(
-            caption = "Solar",
-            value = formatWatts(state?.totalSolarW),
-            valueColor = powerColor(powerSign(state?.totalSolarW, positiveIsConsumption = false)),
-            fx = SOLAR_X, fy = SOLAR_Y, tile = NODE_TILE, w = wDp, h = hDp,
-        )
-        Label(
-            caption = "Home",
-            value = if (state == null) "—"
-                    else formatWatts(houseLoadW(state.totalSolarW, state.gridW, state.batteryW)),
-            valueColor = ems.onTile,
-            fx = HOUSE_X, fy = ROW_Y, tile = HOUSE_TILE, w = wDp, h = hDp,
-        )
-        Label(
-            caption = if ((state?.gridW ?: 0) < 0) "Grid · export" else "Grid · import",
-            value = formatWatts(state?.gridW),
-            valueColor = powerColor(powerSign(state?.gridW, positiveIsConsumption = true)),
-            fx = GRID_X, fy = ROW_Y, tile = NODE_TILE, w = wDp, h = hDp,
-        )
-        Label(
-            caption = state?.batteryCharge?.let { "Battery · $it%" } ?: "Battery",
-            value = formatWatts(state?.batteryW),
-            valueColor = powerColor(powerSign(state?.batteryW, positiveIsConsumption = true)),
-            fx = BATTERY_X, fy = ROW_Y, tile = NODE_TILE, w = wDp, h = hDp,
-        )
+        // Power values, below each tile.
+        ValueLabel(formatWatts(state?.totalSolarW),
+            powerColor(powerSign(state?.totalSolarW, positiveIsConsumption = false)),
+            SOLAR_X, SOLAR_Y, NODE_H, wDp, hDp)
+        ValueLabel(
+            if (state == null) "—" else formatWatts(houseLoadW(state.totalSolarW, state.gridW, state.batteryW)),
+            ems.onTile, HOUSE_X, ROW_Y, HOUSE_H, wDp, hDp)
+        ValueLabel(formatWatts(state?.gridW),
+            powerColor(powerSign(state?.gridW, positiveIsConsumption = true)),
+            GRID_X, ROW_Y, NODE_H, wDp, hDp)
+        ValueLabel(formatWatts(state?.batteryW),
+            powerColor(powerSign(state?.batteryW, positiveIsConsumption = true)),
+            BATTERY_X, ROW_Y, NODE_H, wDp, hDp)
     }
 }
 
 @Composable
-private fun IconNode(
+private fun NodeTile(
     icon: ImageVector,
-    tile: Dp,
+    caption: String,
+    tileW: Dp,
+    tileH: Dp,
     tileColor: Color,
     fx: Float,
     fy: Float,
     w: Dp,
     h: Dp,
 ) {
-    IconTile(
-        icon = icon,
-        contentDescription = null,
-        size = tile,
-        tileColor = tileColor,
-        modifier = Modifier.offset(x = w * fx - tile / 2, y = h * fy - tile / 2),
-    )
+    val ems = LocalEmsColors.current
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = tileColor,
+        modifier = Modifier
+            .offset(x = w * fx - tileW / 2, y = h * fy - tileH / 2)
+            .size(tileW, tileH),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = caption,
+                tint = ems.onTile,
+                modifier = Modifier.size(28.dp),
+            )
+            Text(
+                caption,
+                color = ems.idle,
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                maxLines = 1,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 4.dp).width(tileW - 8.dp),
+            )
+        }
+    }
 }
 
 @Composable
-private fun Label(
-    caption: String,
+private fun ValueLabel(
     value: String,
     valueColor: Color,
     fx: Float,
     fy: Float,
-    tile: Dp,
+    tileH: Dp,
     w: Dp,
     h: Dp,
 ) {
-    val ems = LocalEmsColors.current
-    Column(
+    Text(
+        value,
+        color = valueColor,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Bold,
+        lineHeight = 16.sp,
+        maxLines = 1,
+        textAlign = TextAlign.Center,
         modifier = Modifier
-            .offset(x = w * fx - LABEL_WIDTH / 2, y = h * fy + tile / 2 + LABEL_GAP)
-            .width(LABEL_WIDTH),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(0.dp),
-    ) {
-        Text(
-            caption, color = ems.idle, fontSize = 10.sp, lineHeight = 12.sp,
-            maxLines = 1, textAlign = TextAlign.Center,
-        )
-        Text(
-            value, color = valueColor, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-            lineHeight = 16.sp, maxLines = 1, textAlign = TextAlign.Center,
-        )
-    }
+            .offset(x = w * fx - 60.dp, y = h * fy + tileH / 2 + LABEL_GAP)
+            .width(120.dp),
+    )
 }
 
-/** Draws one thin, solid arrow connecting two icon centers, inset to each end. */
+/** Draws one thin, solid arrow connecting two tile centers, inset to each end, filled tip. */
 private fun DrawScope.drawFlow(
     from: Offset,
     to: Offset,
@@ -188,11 +212,9 @@ private fun DrawScope.drawFlow(
     val headLen = 11.dp.toPx()
     val headHalfWidth = 6.dp.toPx()
     val headAngle = atan2(end.y - start.y, end.x - start.x)
-    // Stop the shaft where the filled head begins so they don't overlap-render.
     val shaftEnd = Offset(end.x - cos(headAngle) * headLen, end.y - sin(headAngle) * headLen)
     drawLine(color, start, shaftEnd, stroke, cap = StrokeCap.Round)
 
-    // Filled triangle tip.
     val perpX = -sin(headAngle)
     val perpY = cos(headAngle)
     val baseLeft = Offset(shaftEnd.x + perpX * headHalfWidth, shaftEnd.y + perpY * headHalfWidth)

@@ -9,7 +9,6 @@ import io.konektis.ems.data.model.StatusState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -24,10 +23,6 @@ class DashboardViewModel(
         SharingStarted.WhileSubscribed(5_000),
         null
     )
-
-    val chargerControlVisible: StateFlow<Boolean> = controlState
-        .map { it is ControlState.Authenticated }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     fun setCharging(state: ChargingState) {
         viewModelScope.launch {

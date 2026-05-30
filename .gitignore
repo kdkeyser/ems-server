@@ -34,3 +34,9 @@ out/
 
 ### VS Code ###
 .vscode/
+.superpowers/
+.claude/
+
+### Android / local ###
+local.properties
+*.swp

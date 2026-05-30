@@ -80,7 +80,7 @@ class ControlWsClient(
                         _connectionState.value = ControlState.Disconnected(e.message)
                     }
                     if (_connectionState.value is ControlState.Unauthenticated) break
-                    delay(BACKOFF[minOf(attempt++, BACKOFF.size - 1)])
+                    delay(WS_BACKOFF[minOf(attempt++, WS_BACKOFF.size - 1)])
                 }
             }
         }
@@ -89,9 +89,5 @@ class ControlWsClient(
     suspend fun send(command: ClientMessage) {
         check(_connectionState.value is ControlState.Authenticated) { "Not authenticated" }
         commandChannel.send(command)
-    }
-
-    companion object {
-        private val BACKOFF = longArrayOf(1_000, 2_000, 4_000, 8_000, 16_000, 30_000)
     }
 }

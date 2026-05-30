@@ -23,9 +23,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     val settingsFlow: Flow<Settings> = store.data.map { prefs ->
         Settings(
-            serverUrl = prefs[KEY_SERVER_URL] ?: "",
-            username  = prefs[KEY_USERNAME]   ?: "",
-            password  = prefs[KEY_PASSWORD]   ?: ""
+            serverUrl = prefs[KEY_SERVER_URL] ?: DEFAULT_SERVER_URL,
+            username  = prefs[KEY_USERNAME]   ?: DEFAULT_USERNAME,
+            password  = prefs[KEY_PASSWORD]   ?: DEFAULT_PASSWORD
         )
     }
 
@@ -38,6 +38,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     }
 
     companion object {
+        const val DEFAULT_SERVER_URL = "10.0.2.2:8080"
+        const val DEFAULT_USERNAME   = "user"
+        const val DEFAULT_PASSWORD   = "password"
+
         private val KEY_SERVER_URL = stringPreferencesKey("server_url")
         private val KEY_USERNAME   = stringPreferencesKey("username")
         private val KEY_PASSWORD   = stringPreferencesKey("password")

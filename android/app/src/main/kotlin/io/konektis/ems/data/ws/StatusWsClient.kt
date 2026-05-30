@@ -49,11 +49,7 @@ class StatusWsClient(
             } catch (e: Exception) {
                 _connectionState.value = ConnectionState.Disconnected(e.message)
             }
-            delay(BACKOFF[minOf(attempt++, BACKOFF.size - 1)])
+            delay(WS_BACKOFF[minOf(attempt++, WS_BACKOFF.size - 1)])
         }
-    }
-
-    companion object {
-        private val BACKOFF = longArrayOf(1_000, 2_000, 4_000, 8_000, 16_000, 30_000)
     }
 }

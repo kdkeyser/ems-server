@@ -22,11 +22,11 @@ class SettingsRepositoryTest {
     private val repo = SettingsRepository(dataStore)
 
     @Test
-    fun `defaults are empty strings`() = testScope.runTest {
+    fun `defaults match backend dev config`() = testScope.runTest {
         val s = repo.settingsFlow.first()
-        assertEquals("", s.serverUrl)
-        assertEquals("", s.username)
-        assertEquals("", s.password)
+        assertEquals(SettingsRepository.DEFAULT_SERVER_URL, s.serverUrl)
+        assertEquals(SettingsRepository.DEFAULT_USERNAME, s.username)
+        assertEquals(SettingsRepository.DEFAULT_PASSWORD, s.password)
     }
 
     @Test

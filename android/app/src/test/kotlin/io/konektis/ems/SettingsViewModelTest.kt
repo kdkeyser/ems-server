@@ -1,25 +1,39 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package io.konektis.ems
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import io.konektis.ems.data.settings.Settings
 import io.konektis.ems.data.settings.SettingsRepository
 import io.konektis.ems.ui.settings.SettingsViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import java.io.File
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class SettingsViewModelTest {
 
-    private val testScope = TestScope(UnconfinedTestDispatcher())
+    private val testDispatcher = UnconfinedTestDispatcher()
+    private val testScope = TestScope(testDispatcher)
     private val dataStore = PreferenceDataStoreFactory.create(
         scope = testScope,
         produceFile = { File.createTempFile("vm_test_prefs", ".preferences_pb") }
     )
     private val repo = SettingsRepository(dataStore)
+
+    @BeforeTest
+    fun setUp() { Dispatchers.setMain(testDispatcher) }
+
+    @AfterTest
+    fun tearDown() { Dispatchers.resetMain() }
 
     @Test
     fun `current settings loaded from repository on init`() = testScope.runTest {

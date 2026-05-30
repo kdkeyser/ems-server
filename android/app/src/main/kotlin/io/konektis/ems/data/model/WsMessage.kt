@@ -4,8 +4,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 sealed class ChargingState {
-    @Serializable class NotCharging : ChargingState()
-    @Serializable class ChargingWithExcessPower : ChargingState()
+    @Serializable data object NotCharging : ChargingState()
+    @Serializable data object ChargingWithExcessPower : ChargingState()
     @Serializable data class ChargingWithMaxPower(val maxPower: UInt) : ChargingState()
 }
 

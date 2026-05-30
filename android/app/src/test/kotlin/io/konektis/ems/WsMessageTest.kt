@@ -11,7 +11,7 @@ class WsMessageTest {
 
     @Test
     fun `SetCharging NotCharging round-trips`() {
-        val msg = ClientMessage.SetCharging(ChargingState.NotCharging())
+        val msg = ClientMessage.SetCharging(ChargingState.NotCharging)
         assertEquals(msg, Json.decodeFromString<ClientMessage>(Json.encodeToString<ClientMessage>(msg)))
     }
 

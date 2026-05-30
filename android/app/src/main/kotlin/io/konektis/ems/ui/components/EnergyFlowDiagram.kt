@@ -29,21 +29,23 @@ import kotlin.math.sin
 
 // Fractional icon-CENTER positions within the diagram box.
 // Grid – House – Battery share one horizontal row; Solar sits above House.
-private const val SOLAR_X = 0.50f;   private const val SOLAR_Y = 0.22f
-private const val HOUSE_X = 0.50f;   private const val ROW_Y = 0.60f
+private const val SOLAR_X = 0.50f;   private const val SOLAR_Y = 0.16f
+private const val HOUSE_X = 0.50f;   private const val ROW_Y = 0.66f
 private const val GRID_X = 0.16f
 private const val BATTERY_X = 0.84f
 
 private val NODE_TILE = 52.dp
 private val HOUSE_TILE = 66.dp
 private val LABEL_WIDTH = 120.dp
-private val LABEL_GAP = 4.dp
-private val EDGE_GAP = 6.dp   // gap between an arrow end and the icon edge
+private val LABEL_GAP = 4.dp        // icon edge → start of its label block
+private val LABEL_BLOCK = 36.dp     // caption + value stacked
+private val EDGE_GAP = 6.dp         // gap between an arrow end and an icon edge
 
 /**
- * SMA-style energy flow. Each value sits with its own icon (never on a line).
- * Arrows are thin, solid, color-coded and connect icon-center to icon-center,
- * inset to the tile edge so they point cleanly at the middle of each icon.
+ * SMA-style energy flow. Each node stacks icon → label → power value (all below the
+ * icon). Arrows are thin, solid, color-coded and connect icon-center to icon-center,
+ * inset to the tile edge. The solar arrow starts below solar's value text so it never
+ * clips the label.
  */
 @Composable
 fun EnergyFlowDiagram(state: StatusState?, modifier: Modifier = Modifier) {
@@ -59,7 +61,7 @@ fun EnergyFlowDiagram(state: StatusState?, modifier: Modifier = Modifier) {
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .aspectRatio(1.2f)
+            .aspectRatio(1f)
     ) {
         val wDp = maxWidth
         val hDp = maxHeight
@@ -73,7 +75,9 @@ fun EnergyFlowDiagram(state: StatusState?, modifier: Modifier = Modifier) {
             val battery = Offset(BATTERY_X * w, ROW_Y * h)
             val rNode = NODE_TILE.toPx() / 2f + EDGE_GAP.toPx()
             val rHouse = HOUSE_TILE.toPx() / 2f + EDGE_GAP.toPx()
-            drawFlow(solar, house, solarDir, solarColor, rNode, rHouse)
+            // Solar's arrow begins below its value text, not at the tile edge.
+            val rSolarStart = NODE_TILE.toPx() / 2f + LABEL_GAP.toPx() + LABEL_BLOCK.toPx() + EDGE_GAP.toPx()
+            drawFlow(solar, house, solarDir, solarColor, rSolarStart, rHouse)
             drawFlow(grid, house, gridDir, gridColor, rNode, rHouse)
             drawFlow(house, battery, batteryDir, batteryColor, rHouse, rNode)
         }
@@ -84,30 +88,31 @@ fun EnergyFlowDiagram(state: StatusState?, modifier: Modifier = Modifier) {
         IconNode(EmsIcons.Grid, NODE_TILE, ems.tileBg, GRID_X, ROW_Y, wDp, hDp)
         IconNode(EmsIcons.Battery, NODE_TILE, ems.tileBg, BATTERY_X, ROW_Y, wDp, hDp)
 
-        // Labels — Solar above its icon (keeps the vertical arrow clear); the rest below.
+        // Labels — all below their icon: caption first, then the power value.
         Label(
-            value = formatWatts(state?.totalSolarW), caption = "Solar",
+            caption = "Solar",
+            value = formatWatts(state?.totalSolarW),
             valueColor = powerColor(powerSign(state?.totalSolarW, positiveIsConsumption = false)),
-            fx = SOLAR_X, fy = SOLAR_Y, tile = NODE_TILE, above = true, w = wDp, h = hDp,
+            fx = SOLAR_X, fy = SOLAR_Y, tile = NODE_TILE, w = wDp, h = hDp,
         )
         Label(
+            caption = "Home",
             value = if (state == null) "—"
                     else formatWatts(houseLoadW(state.totalSolarW, state.gridW, state.batteryW)),
-            caption = "Home",
             valueColor = ems.onTile,
-            fx = HOUSE_X, fy = ROW_Y, tile = HOUSE_TILE, above = false, w = wDp, h = hDp,
+            fx = HOUSE_X, fy = ROW_Y, tile = HOUSE_TILE, w = wDp, h = hDp,
         )
         Label(
-            value = formatWatts(state?.gridW),
             caption = if ((state?.gridW ?: 0) < 0) "Grid · export" else "Grid · import",
+            value = formatWatts(state?.gridW),
             valueColor = powerColor(powerSign(state?.gridW, positiveIsConsumption = true)),
-            fx = GRID_X, fy = ROW_Y, tile = NODE_TILE, above = false, w = wDp, h = hDp,
+            fx = GRID_X, fy = ROW_Y, tile = NODE_TILE, w = wDp, h = hDp,
         )
         Label(
-            value = formatWatts(state?.batteryW),
             caption = state?.batteryCharge?.let { "Battery · $it%" } ?: "Battery",
+            value = formatWatts(state?.batteryW),
             valueColor = powerColor(powerSign(state?.batteryW, positiveIsConsumption = true)),
-            fx = BATTERY_X, fy = ROW_Y, tile = NODE_TILE, above = false, w = wDp, h = hDp,
+            fx = BATTERY_X, fy = ROW_Y, tile = NODE_TILE, w = wDp, h = hDp,
         )
     }
 }
@@ -133,39 +138,34 @@ private fun IconNode(
 
 @Composable
 private fun Label(
-    value: String,
     caption: String,
+    value: String,
     valueColor: Color,
     fx: Float,
     fy: Float,
     tile: Dp,
-    above: Boolean,
     w: Dp,
     h: Dp,
 ) {
     val ems = LocalEmsColors.current
-    // ~34dp tall label block; for `above` we anchor its top so it ends just over the icon.
-    val labelBlock = 34.dp
-    val y = if (above) h * fy - tile / 2 - LABEL_GAP - labelBlock
-            else h * fy + tile / 2 + LABEL_GAP
     Column(
         modifier = Modifier
-            .offset(x = w * fx - LABEL_WIDTH / 2, y = y)
+            .offset(x = w * fx - LABEL_WIDTH / 2, y = h * fy + tile / 2 + LABEL_GAP)
             .width(LABEL_WIDTH),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            value, color = valueColor, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+            caption, color = ems.idle, fontSize = 10.sp,
             maxLines = 1, textAlign = TextAlign.Center,
         )
         Text(
-            caption, color = ems.idle, fontSize = 10.sp,
+            value, color = valueColor, fontSize = 14.sp, fontWeight = FontWeight.Bold,
             maxLines = 1, textAlign = TextAlign.Center,
         )
     }
 }
 
-/** Draws one thin, solid arrow connecting two icon centers, inset to each tile edge. */
+/** Draws one thin, solid arrow connecting two icon centers, inset to each end. */
 private fun DrawScope.drawFlow(
     from: Offset,
     to: Offset,

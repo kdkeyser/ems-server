@@ -1,6 +1,7 @@
 package io.konektis.ems.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.aspectRatio
@@ -13,6 +14,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -153,14 +156,15 @@ private fun Label(
             .offset(x = w * fx - LABEL_WIDTH / 2, y = h * fy + tile / 2 + LABEL_GAP)
             .width(LABEL_WIDTH),
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         Text(
-            caption, color = ems.idle, fontSize = 10.sp,
+            caption, color = ems.idle, fontSize = 10.sp, lineHeight = 12.sp,
             maxLines = 1, textAlign = TextAlign.Center,
         )
         Text(
             value, color = valueColor, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-            maxLines = 1, textAlign = TextAlign.Center,
+            lineHeight = 16.sp, maxLines = 1, textAlign = TextAlign.Center,
         )
     }
 }
@@ -181,10 +185,23 @@ private fun DrawScope.drawFlow(
     val start = if (dir == FlowDirection.FORWARD) a else b
     val end = if (dir == FlowDirection.FORWARD) b else a
     val stroke = 2.dp.toPx()
-    drawLine(color, start, end, stroke)
+    val headLen = 11.dp.toPx()
+    val headHalfWidth = 6.dp.toPx()
     val headAngle = atan2(end.y - start.y, end.x - start.x)
-    val headLen = 10.dp.toPx()
-    val spread = 0.5f
-    drawLine(color, end, Offset(end.x - cos(headAngle - spread) * headLen, end.y - sin(headAngle - spread) * headLen), stroke)
-    drawLine(color, end, Offset(end.x - cos(headAngle + spread) * headLen, end.y - sin(headAngle + spread) * headLen), stroke)
+    // Stop the shaft where the filled head begins so they don't overlap-render.
+    val shaftEnd = Offset(end.x - cos(headAngle) * headLen, end.y - sin(headAngle) * headLen)
+    drawLine(color, start, shaftEnd, stroke, cap = StrokeCap.Round)
+
+    // Filled triangle tip.
+    val perpX = -sin(headAngle)
+    val perpY = cos(headAngle)
+    val baseLeft = Offset(shaftEnd.x + perpX * headHalfWidth, shaftEnd.y + perpY * headHalfWidth)
+    val baseRight = Offset(shaftEnd.x - perpX * headHalfWidth, shaftEnd.y - perpY * headHalfWidth)
+    val head = Path().apply {
+        moveTo(end.x, end.y)
+        lineTo(baseLeft.x, baseLeft.y)
+        lineTo(baseRight.x, baseRight.y)
+        close()
+    }
+    drawPath(head, color)
 }

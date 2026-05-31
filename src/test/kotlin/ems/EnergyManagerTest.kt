@@ -69,20 +69,21 @@ class EnergyManagerTest {
 
     @Test fun `tier1 full data runs cascade and sets battery remainder`() = runTest {
         val bat = battery(0)
-        // grid -3000 exporting, charger 0, heat pump 0 → available 3000 → charger 13A (2990W) → battery 10W
+        // grid -3000 exporting, charger 0, heat pump 0 → available 3000 → charger 13A (2990W).
+        // projectedGrid = -3000 + 2990 = -10W, within the 50W deadband → battery holds at 0W.
         val world = World(grid(-3000), mapOf("c" to charger(0)), emptyMap(),
             mapOf("h" to heatpump(0)), mapOf("b" to bat))
         manager(world).tick()
-        coVerify { bat.setChargingPower(Watt(10)) }
+        coVerify { bat.setChargingPower(Watt(0)) }
     }
 
     @Test fun `tier2 missing heatpump still balances battery on grid`() = runTest {
         val bat = battery(200)
-        // charger present, heat pump missing → degraded; decideDegraded(600,200)=200-600=-400
+        // charger present, heat pump missing → degraded; decideDegraded(600,200)=200-0.5*600=-100
         val world = World(grid(600), mapOf("c" to charger(0)), emptyMap(),
             emptyMap(), mapOf("b" to bat))
         manager(world).tick()
-        coVerify { bat.setChargingPower(Watt(-400)) }
+        coVerify { bat.setChargingPower(Watt(-100)) }
     }
 
     @Test fun `tier2 does not command charger`() = runTest {

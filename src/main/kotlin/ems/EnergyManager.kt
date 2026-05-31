@@ -1,6 +1,7 @@
 package io.konektis.ems
 
 import io.klogging.Klogging
+import io.konektis.ManagerMode
 import io.konektis.config.Config
 import io.konektis.devices.Watt
 import io.konektis.devices.World
@@ -20,25 +21,75 @@ class EnergyManager(
 ) : Klogging {
 
     var mode = Mode.AUTO
+        private set
+    private var previousMode = Mode.AUTO
+    private var blindTicks = 0
+
     val emsStateFlow = MutableStateFlow(EMSState(null, null, null, null, null, null, null))
+    val modeFlow = MutableStateFlow(ManagerMode.AUTO)
+
+    fun setMode(newMode: Mode) {
+        mode = newMode
+        modeFlow.value = if (newMode == Mode.AUTO) ManagerMode.AUTO else ManagerMode.MANUAL
+    }
 
     suspend fun run() {
         while (true) {
-            val emsState = buildEMSState()
-            emsStateFlow.value = emsState
-
-            if (mode == Mode.AUTO) {
-                val snapshot = buildWorldSnapshot(emsState)
-                if (snapshot == null) {
-                    logger.warn("Incomplete device state — skipping optimization tick")
-                    logger.warn("State was $emsState")
-                } else {
-                    applyDecisions(strategy.decide(snapshot))
-                }
-            }
-
+            tick()
             delay(Duration.ofSeconds(5))
         }
+    }
+
+    /** One control cycle. Extracted so tests can drive it without the timing loop. */
+    suspend fun tick() {
+        val emsState = buildEMSState()
+        emsStateFlow.value = emsState
+
+        // AUTO -> MANUAL transition: hand everything back to its own logic, once.
+        if (mode == Mode.MANUAL && previousMode == Mode.AUTO) {
+            releaseAll()
+        }
+        previousMode = mode
+
+        if (mode != Mode.AUTO) return
+
+        when {
+            // Tier 3 — blind: grid or battery reading missing. Fail toward the inverter.
+            emsState.gridPower == null || emsState.batteryPower == null -> {
+                blindTicks++
+                if (blindTicks == BLIND_RELEASE_TICKS) {
+                    logger.warn("Blind for $BLIND_RELEASE_TICKS ticks — releasing battery to inverter")
+                    world.batteries.values.forEach { battery ->
+                        runCatchingLog("release battery") { battery.releaseToInverter() }
+                    }
+                }
+            }
+            // Tier 1 — full data: run the surplus cascade.
+            emsState.chargerPower != null && emsState.heatpumpPower != null -> {
+                blindTicks = 0
+                val snapshot = buildWorldSnapshot(emsState)
+                if (snapshot != null) applyDecisions(strategy.decide(snapshot))
+            }
+            // Tier 2 — degraded: grid + battery present; steer the battery only.
+            else -> {
+                blindTicks = 0
+                val target = strategy.decideDegraded(Watt(emsState.gridPower!!), Watt(emsState.batteryPower!!))
+                world.batteries.values.forEach { battery ->
+                    runCatchingLog("set battery") { battery.setChargingPower(target) }
+                }
+            }
+        }
+    }
+
+    private suspend fun releaseAll() {
+        world.batteries.values.forEach { battery ->
+            runCatchingLog("release battery") { battery.releaseToInverter() }
+        }
+        world.smartConsumers.values.forEach { consumer ->
+            runCatchingLog("heatpump normal") { consumer.setConsumeMode(ConsumeMode.Unrestricted) }
+        }
+        // TODO: charger release is best-effort. A full revert needs stopping the Webasto
+        // keepalive (register 6000); not implemented. We simply stop sending setpoints.
     }
 
     suspend fun buildEMSState(): EMSState {
@@ -106,5 +157,17 @@ class EnergyManager(
                 }
             }
         }
+    }
+
+    private suspend fun runCatchingLog(what: String, block: suspend () -> Unit) {
+        try {
+            block()
+        } catch (e: Exception) {
+            logger.error("Failed to $what", e)
+        }
+    }
+
+    companion object {
+        const val BLIND_RELEASE_TICKS = 6  // ~30s at 5s cadence
     }
 }

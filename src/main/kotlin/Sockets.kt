@@ -9,11 +9,11 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlin.time.Duration.Companion.seconds
 import io.klogging.logger
-import io.konektis.ems.EMSState
+import io.konektis.ems.EnergyManager
 import io.konektis.config.WebSocketConfig
-import kotlinx.coroutines.flow.Flow
 
-fun Application.configureSockets(emsStateFlow: Flow<EMSState>, wsConfig: WebSocketConfig) {
+fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSocketConfig) {
+    val emsStateFlow = energyManager.emsStateFlow
     install(WebSockets) {
         pingPeriod = 30.seconds
         timeout = 30.seconds
@@ -65,6 +65,16 @@ fun Application.configureSockets(emsStateFlow: Flow<EMSState>, wsConfig: WebSock
                                 } else {
                                     send(Json.encodeToString(Message.Unauthorized(message.username) as Message))
                                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication failed"))
+                                }
+                            }
+                            is ClientMessage.SetMode -> {
+                                if (!authenticated) {
+                                    close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication required"))
+                                } else {
+                                    energyManager.setMode(
+                                        if (message.mode == ManagerMode.AUTO) io.konektis.ems.Mode.AUTO else io.konektis.ems.Mode.MANUAL
+                                    )
+                                    send(Json.encodeToString(Message.ModeUpdate(message.mode) as Message))
                                 }
                             }
                             else -> {

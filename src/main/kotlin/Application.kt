@@ -9,7 +9,6 @@ import io.konektis.config.loadConfig
 import io.konektis.config.WebSocketConfig
 import io.konektis.di.AppComponent
 import io.konektis.di.create
-import io.konektis.ems.EMSState
 import io.konektis.ems.EnergyManager
 import io.ktor.server.application.*
 import io.konektis.ocpp.configureOcppServer
@@ -66,7 +65,7 @@ class Main : Klogging {
             launch { energyManager.run() }
             launch {
                 val server = embeddedServer(Netty, port = 8080) {
-                    module(energyManager.emsStateFlow, config.websocket, dataCollector.statusStateFlow)
+                    module(energyManager, config.websocket, dataCollector.statusStateFlow)
                 }
                 server.start(wait = true)
             }
@@ -75,10 +74,10 @@ class Main : Klogging {
     }
 }
 
-fun Application.module(emsStateFlow: Flow<EMSState>, wsConfig: WebSocketConfig, statusFlow: Flow<StatusState?>) {
+fun Application.module(energyManager: EnergyManager, wsConfig: WebSocketConfig, statusFlow: Flow<StatusState?>) {
     configureSecurity()
     configureAdministration()
-    configureSockets(emsStateFlow, wsConfig)
+    configureSockets(energyManager, wsConfig)
     configureStatusPage(statusFlow)
     configureOcppServer()
     configureDatabases()

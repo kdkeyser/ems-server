@@ -20,6 +20,8 @@ class EnergyManager(
     private val strategy: Strategy
 ) : Klogging {
 
+    // setMode() is called from the WebSocket coroutine; tick() reads mode from the run() loop.
+    @Volatile
     var mode = Mode.AUTO
         private set
     private var previousMode = Mode.AUTO
@@ -57,8 +59,11 @@ class EnergyManager(
             // Tier 3 — blind: grid or battery reading missing. Fail toward the inverter.
             emsState.gridPower == null || emsState.batteryPower == null -> {
                 blindTicks++
-                if (blindTicks == BLIND_RELEASE_TICKS) {
-                    logger.warn("Blind for $BLIND_RELEASE_TICKS ticks — releasing battery to inverter")
+                if (blindTicks >= BLIND_RELEASE_TICKS) {
+                    // Retry every blind tick past the threshold: SMABattery.releaseToInverter() is a
+                    // no-op once released, so a failed 803 write is retried until it succeeds rather
+                    // than leaving the battery armed with no steering (fail toward the inverter).
+                    logger.warn("Blind for $blindTicks ticks (>= $BLIND_RELEASE_TICKS) — releasing battery to inverter")
                     world.batteries.values.forEach { battery ->
                         runCatchingLog("release battery") { battery.releaseToInverter() }
                     }

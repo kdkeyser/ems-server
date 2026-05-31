@@ -94,16 +94,16 @@ class EnergyManagerTest {
         coVerify(exactly = 0) { ch.setMaxChargerPower(any()) }
     }
 
-    @Test fun `blind releases after 6 ticks then once`() = runTest {
+    @Test fun `blind releases from the 6th tick onward`() = runTest {
         val bat = battery(0)
         val world = World(grid(null), emptyMap(), emptyMap(), emptyMap(), mapOf("b" to bat))
         val m = manager(world)
         repeat(5) { m.tick() }
         coVerify(exactly = 0) { bat.releaseToInverter() }
-        m.tick() // 6th
+        m.tick() // 6th — first release
         coVerify(exactly = 1) { bat.releaseToInverter() }
-        m.tick() // 7th — not re-fired
-        coVerify(exactly = 1) { bat.releaseToInverter() }
+        m.tick() // 7th — retried each blind tick (SMABattery makes repeat releases a no-op)
+        coVerify(exactly = 2) { bat.releaseToInverter() }
     }
 
     @Test fun `good tick resets blind counter`() = runTest {

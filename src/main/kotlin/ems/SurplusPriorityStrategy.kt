@@ -38,8 +38,11 @@ class SurplusPriorityStrategy : Strategy {
 
         return ControlDecisions(
             chargerMaxAmps = chargerAmps,
-            batteryTargetPower = batteryTarget,
+            batteryCommand = BatteryCommand.SetPower(batteryTarget),
             heatpumpConsumeMode = heatpumpMode
         )
     }
+
+    override fun decideDegraded(gridPower: Watt, batteryPower: Watt): Watt =
+        Watt(batteryPower.value - gridPower.value)
 }

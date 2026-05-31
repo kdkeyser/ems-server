@@ -85,12 +85,15 @@ class EnergyManager(
                 }
             }
         }
-        decisions.batteryTargetPower?.let { power ->
+        decisions.batteryCommand?.let { cmd ->
             world.batteries.values.forEach { battery ->
                 try {
-                    battery.setChargingPower(power)
+                    when (cmd) {
+                        is BatteryCommand.SetPower -> battery.setChargingPower(cmd.power)
+                        BatteryCommand.ReleaseToInverter -> battery.releaseToInverter()
+                    }
                 } catch (e: Exception) {
-                    logger.error("Failed to set battery power", e)
+                    logger.error("Failed to apply battery command", e)
                 }
             }
         }

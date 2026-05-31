@@ -16,10 +16,14 @@ data class WorldSnapshot(
 
 data class ControlDecisions(
     val chargerMaxAmps: Int?,             // null = no change
-    val batteryTargetPower: Watt?,        // null = no change; positive=charge, negative=discharge
+    val batteryCommand: BatteryCommand?,  // null = no change
     val heatpumpConsumeMode: ConsumeMode? // null = no change
 )
 
 interface Strategy {
+    /** Full-data decision (tier 1). */
     fun decide(snapshot: WorldSnapshot): ControlDecisions
+
+    /** Degraded decision (tier 2): battery target to drive grid → 0 using only grid + battery. */
+    fun decideDegraded(gridPower: Watt, batteryPower: Watt): Watt
 }

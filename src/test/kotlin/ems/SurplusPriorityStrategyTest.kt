@@ -12,7 +12,7 @@ class SurplusPriorityStrategyTest {
     private val strategy = SurplusPriorityStrategy()
 
     private fun snapshot(
-        gridPower: Int,       // negative=export, positive=import
+        gridPower: Int = 0,       // negative=export, positive=import
         solarPower: Int = 0,
         chargerPower: Int = 0,
         batteryPower: Int = 0,
@@ -39,7 +39,7 @@ class SurplusPriorityStrategyTest {
         // remainder = 4000 - 17*230 = 4000 - 3910 = 90W to battery
         val decisions = strategy.decide(snapshot(gridPower = -2000, chargerPower = 2000))
         assertEquals(17, decisions.chargerMaxAmps)
-        assertEquals(Watt(90), decisions.batteryTargetPower)
+        assertEquals(BatteryCommand.SetPower(Watt(90)), decisions.batteryCommand)
         assertTrue(decisions.heatpumpConsumeMode is ConsumeMode.Unrestricted)
     }
 
@@ -51,7 +51,7 @@ class SurplusPriorityStrategyTest {
         // remainder = 2500 - 10*230 = 2500 - 2300 = 200W to battery
         val decisions = strategy.decide(snapshot(gridPower = 500, chargerPower = 3000))
         assertEquals(10, decisions.chargerMaxAmps)
-        assertEquals(Watt(200), decisions.batteryTargetPower)
+        assertEquals(BatteryCommand.SetPower(Watt(200)), decisions.batteryCommand)
     }
 
     @Test
@@ -62,7 +62,7 @@ class SurplusPriorityStrategyTest {
         // All 200W goes to battery
         val decisions = strategy.decide(snapshot(gridPower = -200, chargerPower = 0, chargerMinAmps = 6))
         assertEquals(0, decisions.chargerMaxAmps)
-        assertEquals(Watt(200), decisions.batteryTargetPower)
+        assertEquals(BatteryCommand.SetPower(Watt(200)), decisions.batteryCommand)
     }
 
     @Test
@@ -73,7 +73,7 @@ class SurplusPriorityStrategyTest {
         // Battery = -1500W (discharge to cover)
         val decisions = strategy.decide(snapshot(gridPower = 1500, chargerPower = 0))
         assertEquals(0, decisions.chargerMaxAmps)
-        assertEquals(Watt(-1500), decisions.batteryTargetPower)
+        assertEquals(BatteryCommand.SetPower(Watt(-1500)), decisions.batteryCommand)
     }
 
     @Test
@@ -84,7 +84,7 @@ class SurplusPriorityStrategyTest {
         // remainder = 16000 - 32*230 = 16000 - 7360 = 8640W to battery
         val decisions = strategy.decide(snapshot(gridPower = -10000, chargerPower = 6000, chargerMaxAmps = 32))
         assertEquals(32, decisions.chargerMaxAmps)
-        assertEquals(Watt(8640), decisions.batteryTargetPower)
+        assertEquals(BatteryCommand.SetPower(Watt(8640)), decisions.batteryCommand)
     }
 
     @Test
@@ -99,5 +99,36 @@ class SurplusPriorityStrategyTest {
         val decisions = strategy.decide(snapshot(gridPower = 800, chargerPower = 0, heatpumpPower = 1000))
         val mode = decisions.heatpumpConsumeMode
         assertTrue(mode is ConsumeMode.SuggestConsumeUpTo)
+    }
+
+    @Test
+    fun `battery absorbs remaining surplus after charger allocation`() {
+        // gridPower=-3000 (exporting), available=3000, charger gets 13A (2990W), battery gets remainder
+        // available=3000, chargerAmps=13, chargerConsumption=2990, batteryTarget=10
+        val decisions = strategy.decide(snapshot(gridPower = -3000))
+        assertEquals(BatteryCommand.SetPower(Watt(10)), decisions.batteryCommand)
+    }
+
+    @Test
+    fun `deficit discharges battery`() {
+        val decisions = strategy.decide(snapshot(gridPower = 1500))
+        assertEquals(BatteryCommand.SetPower(Watt(-1500)), decisions.batteryCommand)
+    }
+
+    @Test
+    fun `degraded importing grid discharges more`() {
+        // currentBattery=200 (charging), grid=+600 importing → target = 200 - 600 = -400
+        assertEquals(Watt(-400), strategy.decideDegraded(Watt(600), Watt(200)))
+    }
+
+    @Test
+    fun `degraded exporting grid charges more`() {
+        // currentBattery=200, grid=-500 exporting → target = 200 - (-500) = 700
+        assertEquals(Watt(700), strategy.decideDegraded(Watt(-500), Watt(200)))
+    }
+
+    @Test
+    fun `degraded balanced grid holds current battery power`() {
+        assertEquals(Watt(300), strategy.decideDegraded(Watt(0), Watt(300)))
     }
 }

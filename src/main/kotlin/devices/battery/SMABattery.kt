@@ -1,5 +1,6 @@
 package io.konektis.devices.battery
 import com.digitalpetri.modbus.pdu.ReadInputRegistersRequest
+import com.digitalpetri.modbus.pdu.ReadInputRegistersResponse
 import com.digitalpetri.modbus.pdu.WriteMultipleRegistersRequest
 import io.klogging.Klogging
 import io.konektis.GlobalTimeSource
@@ -10,9 +11,27 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.kotlincrypto.bitops.endian.Endian
 
-class SMABattery(private val host: String) : Klogging, Battery {
+/** Minimal seam over the raw Modbus reads/writes SMABattery needs, so the guard is testable. */
+interface BatteryModbus {
+    suspend fun readInput(register: Int, count: Int): ReadInputRegistersResponse
+    suspend fun writeRegisters(register: Int, count: Int, values: ByteArray)
+}
+
+private class RealBatteryModbus(host: String) : BatteryModbus {
     private val client = ModbusTCPClient(host)
-    private var internalState : DeviceUpdate<BatteryState>? = null
+
+    override suspend fun readInput(register: Int, count: Int): ReadInputRegistersResponse =
+        client.withClient { it.readInputRegisters(3, ReadInputRegistersRequest(register, count)) }
+
+    override suspend fun writeRegisters(register: Int, count: Int, values: ByteArray) {
+        client.withClient { it.writeMultipleRegisters(3, WriteMultipleRegistersRequest(register, count, values)) }
+    }
+}
+
+class SMABattery(private val modbus: BatteryModbus) : Klogging, Battery {
+    constructor(host: String) : this(RealBatteryModbus(host))
+
+    private var internalState: DeviceUpdate<BatteryState>? = null
     private val mutex = Mutex()
 
     // State of charge percentage (0-100), U32, unit-id 3. Verify scaling against SMA docs.
@@ -28,55 +47,39 @@ class SMABattery(private val host: String) : Klogging, Battery {
     // Write 802 to enable Modbus power control; write 803 to hand control back to the inverter
     private val MODBUS_OUTPUT_REGISTER_CHARGING_CONTROL = 40151
 
-    private suspend fun getCharge() : ULong {
-        val result = client.withClient { client ->
-            client.readInputRegisters(3, ReadInputRegistersRequest(MODBUS_INPUT_REGISTER_BATTERY_CHARGE, 4))
-        }
-        return Endian.Big.longFrom(result.registers,0).toULong()
+    private suspend fun getCharge(): ULong {
+        val result = modbus.readInput(MODBUS_INPUT_REGISTER_BATTERY_CHARGE, 4)
+        return Endian.Big.longFrom(result.registers, 0).toULong()
     }
 
-    private suspend fun getCurrentCharge() : UInt {
-        val result = client.withClient { client ->
-            client.readInputRegisters(3, ReadInputRegistersRequest(MODBUS_INPUT_REGISTER_CURRENT_BATTERY_CHARGE, 2))
-        }
-        return Endian.Big.intFrom(result.registers,0).toUInt()
+    private suspend fun getCurrentCharge(): UInt {
+        val result = modbus.readInput(MODBUS_INPUT_REGISTER_CURRENT_BATTERY_CHARGE, 2)
+        return Endian.Big.intFrom(result.registers, 0).toUInt()
     }
 
-    private suspend fun getCurrentDischarge() : UInt {
-        val result = client.withClient { client ->
-            client.readInputRegisters(3, ReadInputRegistersRequest(MODBUS_INPUT_REGISTER_CURRENT_BATTERY_DISCHARGE, 2))
-        }
-        return Endian.Big.intFrom(result.registers,0).toUInt()
+    private suspend fun getCurrentDischarge(): UInt {
+        val result = modbus.readInput(MODBUS_INPUT_REGISTER_CURRENT_BATTERY_DISCHARGE, 2)
+        return Endian.Big.intFrom(result.registers, 0).toUInt()
     }
 
-    private suspend fun getCapacity() : UInt {
-        val result = client.withClient { client ->
-            client.readInputRegisters(3, ReadInputRegistersRequest(MODBUS_INPUT_REGISTER_CURRENT_BATTERY_CAPACITY, 2))
-        }
-        return Endian.Big.intFrom(result.registers,0).toUInt()
+    private suspend fun getCapacity(): UInt {
+        val result = modbus.readInput(MODBUS_INPUT_REGISTER_CURRENT_BATTERY_CAPACITY, 2)
+        return Endian.Big.intFrom(result.registers, 0).toUInt()
     }
 
-    override suspend fun setChargingPower(power : Watt) {
+    override suspend fun setChargingPower(power: Watt) {
         mutex.withLock {
-            val result = client.withClient { client ->
-                val bytes = ByteArray(4)
-                // 802 enables Modbus power control; 803 disables it (returns control to inverter)
-                Endian.Big.pack(802, bytes, 0)
-                client.writeMultipleRegisters(
-                    3,
-                    WriteMultipleRegistersRequest(MODBUS_OUTPUT_REGISTER_CHARGING_CONTROL, 2, bytes)
-                )
-            }
-            // TODO: what to do with result?
+            val enable = ByteArray(4).also { Endian.Big.pack(802, it, 0) }
+            modbus.writeRegisters(MODBUS_OUTPUT_REGISTER_CHARGING_CONTROL, 2, enable)
+            val target = ByteArray(4).also { Endian.Big.pack(power.value, it, 0) }
+            modbus.writeRegisters(MODBUS_OUTPUT_REGISTER_CHARGING_POWER, 2, target)
+        }
+    }
 
-            val result2 = client.withClient { client ->
-                val bytes = ByteArray(4)
-                Endian.Big.pack(power.value, bytes, 0)
-                client.writeMultipleRegisters(
-                    3,
-                    WriteMultipleRegistersRequest(MODBUS_OUTPUT_REGISTER_CHARGING_POWER, 2, bytes)
-                )
-            }
+    override suspend fun releaseToInverter() {
+        mutex.withLock {
+            val disable = ByteArray(4).also { Endian.Big.pack(803, it, 0) }
+            modbus.writeRegisters(MODBUS_OUTPUT_REGISTER_CHARGING_CONTROL, 2, disable)
         }
     }
 

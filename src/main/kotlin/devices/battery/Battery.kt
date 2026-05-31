@@ -12,5 +12,6 @@ interface Battery {
     suspend fun update()
     suspend fun getState(): DeviceUpdate<BatteryState>?
     suspend fun setChargingPower(power: Watt)
+    suspend fun releaseToInverter()
 }
 

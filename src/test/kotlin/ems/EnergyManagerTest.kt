@@ -79,11 +79,11 @@ class EnergyManagerTest {
 
     @Test fun `tier2 missing heatpump still balances battery on grid`() = runTest {
         val bat = battery(200)
-        // charger present, heat pump missing → degraded; decideDegraded(600,200)=200-0.5*600=-100
+        // charger present, heat pump missing → degraded; decideDegraded(600,200)=200-600=-400
         val world = World(grid(600), mapOf("c" to charger(0)), emptyMap(),
             emptyMap(), mapOf("b" to bat))
         manager(world).tick()
-        coVerify { bat.setChargingPower(Watt(-100)) }
+        coVerify { bat.setChargingPower(Watt(-400)) }
     }
 
     @Test fun `tier2 does not command charger`() = runTest {

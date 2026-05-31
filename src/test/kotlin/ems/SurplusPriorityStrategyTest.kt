@@ -8,8 +8,7 @@ import kotlin.test.assertTrue
 
 class SurplusPriorityStrategyTest {
 
-    // gain = 0.5, deadband = 50 W (the production defaults). The battery only corrects half the
-    // remaining grid imbalance per tick, and ignores imbalances <= 50 W.
+    // gain = 1.0 (deadbeat: full correction per tick), deadband = 50 W (the production defaults).
     private val strategy = SurplusPriorityStrategy()
 
     private fun snapshot(
@@ -33,51 +32,49 @@ class SurplusPriorityStrategyTest {
     )
 
     @Test
-    fun `large solar surplus — charger gets max amps, battery absorbs half the remainder`() {
-        // Exporting 2000W, charger at 2000W. available = 2000 + 2000 = 4000W -> 17A (3910W).
-        // projectedGrid = -2000 + 3910 - 2000 = -90 (still 90W export). battery = -0.5*-90 = +45W.
+    fun `large solar surplus — charger gets max amps, battery absorbs the remainder`() {
+        // Exporting 2000W, charger at 2000W. available = 4000W -> 17A (3910W).
+        // projectedGrid = -2000 + 3910 - 2000 = -90 (still 90W export). battery = -(-90) = +90W.
         val decisions = strategy.decide(snapshot(gridPower = -2000, chargerPower = 2000))
         assertEquals(17, decisions.chargerMaxAmps)
-        assertEquals(BatteryCommand.SetPower(Watt(45)), decisions.batteryCommand)
+        assertEquals(BatteryCommand.SetPower(Watt(90)), decisions.batteryCommand)
         assertTrue(decisions.heatpumpConsumeMode is ConsumeMode.Unrestricted)
     }
 
     @Test
     fun `importing from grid — charger reduces and battery charges the freed surplus`() {
-        // Importing 500W, charger at 3000W. available = 3000 - 500 = 2500W -> 10A (2300W).
+        // Importing 500W, charger at 3000W. available = 2500W -> 10A (2300W).
         // projectedGrid = 500 + 2300 - 3000 = -200 (charger reduction now over-produces 200W).
-        // battery = -0.5*-200 = +100W. Charging while *measured* grid imports is correct here:
-        // the import is caused by the old charger setpoint that we are simultaneously backing off.
+        // battery = +200W. Charging while *measured* grid imports is correct: the import is caused
+        // by the old charger setpoint we are simultaneously backing off.
         val decisions = strategy.decide(snapshot(gridPower = 500, chargerPower = 3000))
         assertEquals(10, decisions.chargerMaxAmps)
-        assertEquals(BatteryCommand.SetPower(Watt(100)), decisions.batteryCommand)
+        assertEquals(BatteryCommand.SetPower(Watt(200)), decisions.batteryCommand)
     }
 
     @Test
-    fun `surplus below charger minimum — charger stops, battery charges half the surplus`() {
-        // Exporting 200W, charger off. 200/230 < 6A min -> charger = 0.
-        // projectedGrid = -200. battery = -0.5*-200 = +100W.
+    fun `surplus below charger minimum — charger stops, battery charges the surplus`() {
+        // Exporting 200W, charger off. 200/230 < 6A min -> charger = 0. projectedGrid = -200 -> +200W.
         val decisions = strategy.decide(snapshot(gridPower = -200, chargerPower = 0, chargerMinAmps = 6))
         assertEquals(0, decisions.chargerMaxAmps)
-        assertEquals(BatteryCommand.SetPower(Watt(100)), decisions.batteryCommand)
+        assertEquals(BatteryCommand.SetPower(Watt(200)), decisions.batteryCommand)
     }
 
     @Test
-    fun `zero solar and importing — charger stops, battery covers half the deficit`() {
-        // Importing 1500W, charger off, no solar. projectedGrid = 1500.
-        // battery = -0.5*1500 = -750W (discharge half the deficit this tick).
+    fun `zero solar and importing — charger stops, battery covers the deficit`() {
+        // Importing 1500W, charger off, no solar. projectedGrid = 1500 -> battery -1500W (discharge).
         val decisions = strategy.decide(snapshot(gridPower = 1500, chargerPower = 0))
         assertEquals(0, decisions.chargerMaxAmps)
-        assertEquals(BatteryCommand.SetPower(Watt(-750)), decisions.batteryCommand)
+        assertEquals(BatteryCommand.SetPower(Watt(-1500)), decisions.batteryCommand)
     }
 
     @Test
     fun `charger surplus clamped to max amps`() {
         // Exporting 10000W, charger at 6000W. available = 16000W -> clamped 32A (7360W).
-        // projectedGrid = -10000 + 7360 - 6000 = -8640. battery = -0.5*-8640 = +4320W.
+        // projectedGrid = -10000 + 7360 - 6000 = -8640. battery = +8640W.
         val decisions = strategy.decide(snapshot(gridPower = -10000, chargerPower = 6000, chargerMaxAmps = 32))
         assertEquals(32, decisions.chargerMaxAmps)
-        assertEquals(BatteryCommand.SetPower(Watt(4320)), decisions.batteryCommand)
+        assertEquals(BatteryCommand.SetPower(Watt(8640)), decisions.batteryCommand)
     }
 
     @Test
@@ -112,31 +109,30 @@ class SurplusPriorityStrategyTest {
     }
 
     @Test
-    fun `deficit discharges battery by the damped amount`() {
+    fun `deficit discharges battery to cover it in one step`() {
         val decisions = strategy.decide(snapshot(gridPower = 1500))
-        assertEquals(BatteryCommand.SetPower(Watt(-750)), decisions.batteryCommand)
+        assertEquals(BatteryCommand.SetPower(Watt(-1500)), decisions.batteryCommand)
     }
 
     @Test
-    fun `ramps the battery down through export without overshooting into import`() {
-        // Battery discharging 2000W while exporting 1500W (e.g. a load just dropped). The damped
-        // controller eases discharge 2000 -> 1250 instead of slamming to -500 (unity gain) and
-        // risking an import overshoot on lagged readings. Still discharging, still exporting — but
-        // converging, not dumping the battery into the grid.
+    fun `corrects an over-discharge in one step instead of dumping into the grid`() {
+        // Battery discharging 2000W while exporting 1500W (a load just dropped). True deficit is only
+        // 500W (available = -2000 + 1500 = -500), so the battery should ease to -500W, not stay at
+        // -2000W feeding the grid. Deadbeat lands that in one tick.
         val decisions = strategy.decide(snapshot(gridPower = -1500, chargerPower = 0, batteryPower = -2000))
-        assertEquals(BatteryCommand.SetPower(Watt(-1250)), decisions.batteryCommand)
+        assertEquals(BatteryCommand.SetPower(Watt(-500)), decisions.batteryCommand)
     }
 
     @Test
-    fun `degraded importing grid discharges by the damped amount`() {
-        // currentBattery=200 (charging), grid=+600 importing -> target = 200 - 0.5*600 = -100
-        assertEquals(Watt(-100), strategy.decideDegraded(Watt(600), Watt(200)))
+    fun `degraded importing grid discharges to cover the deficit`() {
+        // currentBattery=200 (charging), grid=+600 importing -> target = 200 - 600 = -400
+        assertEquals(Watt(-400), strategy.decideDegraded(Watt(600), Watt(200)))
     }
 
     @Test
-    fun `degraded exporting grid charges by the damped amount`() {
-        // currentBattery=200, grid=-500 exporting -> target = 200 - 0.5*-500 = 450
-        assertEquals(Watt(450), strategy.decideDegraded(Watt(-500), Watt(200)))
+    fun `degraded exporting grid charges the surplus`() {
+        // currentBattery=200, grid=-500 exporting -> target = 200 - (-500) = 700
+        assertEquals(Watt(700), strategy.decideDegraded(Watt(-500), Watt(200)))
     }
 
     @Test

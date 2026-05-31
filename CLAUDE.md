@@ -43,7 +43,7 @@ src/main/kotlin/
 |--------|----------|-------|
 | P1Meter (HomeWizard) | HTTP GET /api/v1/data | JSON; `active_power_w` signed (negative=export) |
 | SMA Solar (Sunny Boy) | Modbus TCP port 502, unit 3 | Register 30775 = total AC power (U32, W) |
-| SMA Battery (Sunny Boy Storage) | Modbus TCP port 502, unit 3 | 30845=SoC%; 31393=charging W; 31395=discharging W; 40149=target power S32; 40151=control enable (802=on, 803=off) |
+| SMA Battery (Sunny Boy Storage) | Modbus TCP port 502, unit 3 | 30845=SoC%; 31393=charging W; 31395=discharging W; 40149=target power S32 (**inverted sign**: +=discharge, −=charge); 40151=control enable (802=on, 803=off) |
 | Webasto Unite | Modbus TCP port 502, unit 1 | 1020=current power W; 5004=max current A; 6000=keepalive (write 1 every <30s) |
 | Daikin HomeHub | Modbus TCP port 502, unit 1 | 50=power W; 55=SG-Ready mode; 56=max power suggestion |
 
@@ -56,7 +56,10 @@ All `power: Int` fields in `EMSState` and `Update` use: **negative = producing/e
 - **SMASolar**: when the inverter is off (no sunlight), Modbus register 30775 returns `Int.MIN_VALUE`. Treat as 0W.
 - **Webasto**: requires a Modbus keepalive write to register 6000 every <30 seconds or it drops remote control.
 - **SMABattery**: write 802 to register 40151 to enable Modbus power control *before* writing
-  target power to register 40149. Write 803 to release control back to the inverter. The EMS
+  target power to register 40149. Register 40149 uses the **opposite sign of our Watt convention**:
+  on this inverter a positive setpoint *discharges* and a negative one *charges*, so
+  `setChargingPower()` negates at the write boundary (confirmed on hardware — a discharge command
+  was charging the battery before the flip). Write 803 to release control back to the inverter. The EMS
   holds control only while steering and releases (803) on MANUAL mode, on grid/battery data
   going blind for ~30s, and on graceful shutdown. The inverter's own watchdog is too slow
   (≥15 min) to rely on for crash recovery.

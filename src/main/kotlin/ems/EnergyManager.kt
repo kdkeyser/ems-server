@@ -73,12 +73,27 @@ class EnergyManager(
             emsState.chargerPower != null && emsState.heatpumpPower != null -> {
                 blindTicks = 0
                 val snapshot = buildWorldSnapshot(emsState)
-                if (snapshot != null) applyDecisions(strategy.decide(snapshot))
+                if (snapshot != null) {
+                    val decisions = strategy.decide(snapshot)
+                    // TEMP diagnostic (warn so it is visible at the default log level): confirm the
+                    // battery setpoint sign against reality. If a negative target makes the battery
+                    // charge, the SMA setpoint write sign (register 40149) is inverted.
+                    logger.warn(
+                        "control: grid=${emsState.gridPower}W battery=${emsState.batteryPower}W " +
+                            "-> ${decisions.batteryCommand} (target >0 = charge, <0 = discharge)"
+                    )
+                    applyDecisions(decisions)
+                }
             }
             // Tier 2 — degraded: grid + battery present; steer the battery only.
             else -> {
                 blindTicks = 0
                 val target = strategy.decideDegraded(Watt(emsState.gridPower!!), Watt(emsState.batteryPower!!))
+                // TEMP diagnostic (see note above) — warn so it surfaces at the default log level.
+                logger.warn(
+                    "control(degraded): grid=${emsState.gridPower}W battery=${emsState.batteryPower}W " +
+                        "-> target=${target.value}W (>0 = charge, <0 = discharge)"
+                )
                 world.batteries.values.forEach { battery ->
                     runCatchingLog("set battery") { battery.setChargingPower(target) }
                 }

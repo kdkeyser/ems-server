@@ -45,7 +45,9 @@ class SMABattery(private val modbus: BatteryModbus) : Klogging, Battery {
     private val MODBUS_INPUT_REGISTER_CURRENT_BATTERY_CHARGE = 31393
     // Current discharging power from battery, W, U32
     private val MODBUS_INPUT_REGISTER_CURRENT_BATTERY_DISCHARGE = 31395
-    // Target charge/discharge power, S32 (positive=charge, negative=discharge), W
+    // Target charge/discharge power, S32, W. NOTE: this register uses the OPPOSITE sign of our Watt
+    // convention — on this SMA inverter a positive setpoint DISCHARGES and a negative one CHARGES.
+    // setChargingPower() negates at the write boundary. (Confirmed on hardware.)
     private val MODBUS_OUTPUT_REGISTER_CHARGING_POWER = 40149
     // Write 802 to enable Modbus power control; write 803 to hand control back to the inverter
     private val MODBUS_OUTPUT_REGISTER_CHARGING_CONTROL = 40151
@@ -80,7 +82,9 @@ class SMABattery(private val modbus: BatteryModbus) : Klogging, Battery {
                 val last = lastTarget
                 if (last != null && kotlin.math.abs(power.value - last) <= POWER_EPSILON_W) return@withLock
             }
-            val target = ByteArray(4).also { Endian.Big.pack(power.value, it, 0) }
+            // Negate: register 40149 is + = discharge, - = charge, opposite of our Watt convention
+            // (+ = charge, - = discharge). lastTarget stays in our convention for the epsilon check.
+            val target = ByteArray(4).also { Endian.Big.pack(-power.value, it, 0) }
             modbus.writeRegisters(MODBUS_OUTPUT_REGISTER_CHARGING_POWER, 2, target)
             lastTarget = power.value
         }

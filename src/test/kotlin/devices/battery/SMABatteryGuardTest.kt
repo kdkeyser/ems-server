@@ -31,7 +31,8 @@ class SMABatteryGuardTest {
         val m = FakeBatteryModbus()
         val b = SMABattery(m)
         b.setChargingPower(Watt(1000))
-        assertEquals(listOf(CONTROL to 802, POWER to 1000), m.writes)
+        // Power value is negated at the write boundary: +1000 (charge) -> register -1000.
+        assertEquals(listOf(CONTROL to 802, POWER to -1000), m.writes)
     }
 
     @Test fun `within-epsilon repeat writes nothing`() = runTest {
@@ -49,7 +50,7 @@ class SMABatteryGuardTest {
         b.setChargingPower(Watt(1000))
         m.writes.clear()
         b.setChargingPower(Watt(1100)) // delta 100 > 25
-        assertEquals(listOf(POWER to 1100), m.writes)
+        assertEquals(listOf(POWER to -1100), m.writes)
     }
 
     @Test fun `release writes 803 only when engaged`() = runTest {
@@ -73,7 +74,7 @@ class SMABatteryGuardTest {
         b.releaseToInverter()
         m.writes.clear()
         b.setChargingPower(Watt(500))         // must re-arm 802 even if target unchanged
-        assertEquals(listOf(CONTROL to 802, POWER to 500), m.writes)
+        assertEquals(listOf(CONTROL to 802, POWER to -500), m.writes)
     }
 
     @Test fun `failed target write does not advance guard state`() = runTest {
@@ -85,6 +86,6 @@ class SMABatteryGuardTest {
         runCatching { b.setChargingPower(Watt(2000)) } // throws inside
         // next call must retry the target (lastTarget not advanced to 2000)
         b.setChargingPower(Watt(2000))
-        assertEquals(listOf(POWER to 2000), m.writes)
+        assertEquals(listOf(POWER to -2000), m.writes)
     }
 }

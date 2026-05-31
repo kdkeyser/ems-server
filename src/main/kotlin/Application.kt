@@ -18,6 +18,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 
 suspend fun main(args: Array<String>) {
     Main().main(args)
@@ -54,6 +56,19 @@ class Main : Klogging {
 
         val dataCollector = component.dataCollector
         val energyManager = component.energyManager
+
+        // Graceful hand-back: on normal stop/restart, release every battery to the inverter (803).
+        // Bounded so a hung Modbus write can't wedge shutdown. Hard kill / power loss is out of
+        // scope — no software can write 803 when the process is gone (the SMA watchdog is too slow).
+        Runtime.getRuntime().addShutdownHook(Thread {
+            runBlocking {
+                withTimeoutOrNull(3_000) {
+                    component.world.batteries.values.forEach {
+                        runCatching { it.releaseToInverter() }
+                    }
+                }
+            }
+        })
 
         coroutineScope {
             launch {

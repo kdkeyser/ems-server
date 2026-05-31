@@ -33,6 +33,9 @@ class SMABattery(private val modbus: BatteryModbus) : Klogging, Battery {
 
     private var internalState: DeviceUpdate<BatteryState>? = null
     private val mutex = Mutex()
+    private var engaged = false
+    private var lastTarget: Int? = null
+    private val POWER_EPSILON_W = 25
 
     // State of charge percentage (0-100), U32, unit-id 3. Verify scaling against SMA docs.
     private val MODBUS_INPUT_REGISTER_CURRENT_BATTERY_CAPACITY = 30845
@@ -69,17 +72,27 @@ class SMABattery(private val modbus: BatteryModbus) : Klogging, Battery {
 
     override suspend fun setChargingPower(power: Watt) {
         mutex.withLock {
-            val enable = ByteArray(4).also { Endian.Big.pack(802, it, 0) }
-            modbus.writeRegisters(MODBUS_OUTPUT_REGISTER_CHARGING_CONTROL, 2, enable)
+            if (!engaged) {
+                val enable = ByteArray(4).also { Endian.Big.pack(802, it, 0) }
+                modbus.writeRegisters(MODBUS_OUTPUT_REGISTER_CHARGING_CONTROL, 2, enable)
+                engaged = true
+            } else {
+                val last = lastTarget
+                if (last != null && kotlin.math.abs(power.value - last) <= POWER_EPSILON_W) return@withLock
+            }
             val target = ByteArray(4).also { Endian.Big.pack(power.value, it, 0) }
             modbus.writeRegisters(MODBUS_OUTPUT_REGISTER_CHARGING_POWER, 2, target)
+            lastTarget = power.value
         }
     }
 
     override suspend fun releaseToInverter() {
         mutex.withLock {
+            if (!engaged) return@withLock
             val disable = ByteArray(4).also { Endian.Big.pack(803, it, 0) }
             modbus.writeRegisters(MODBUS_OUTPUT_REGISTER_CHARGING_CONTROL, 2, disable)
+            engaged = false
+            lastTarget = null
         }
     }
 

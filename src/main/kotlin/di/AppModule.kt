@@ -41,7 +41,7 @@ interface AppModule {
         DataCollector(config.refreshThreads, world)
 
     @Provides
-    fun provideStrategy(): Strategy = SimpleGridCompensationStrategy()
+    fun provideStrategy(): Strategy = SurplusPriorityStrategy()
 
     @Provides
     fun provideEnergyManager(world: World, config: Config, strategy: Strategy): EnergyManager =

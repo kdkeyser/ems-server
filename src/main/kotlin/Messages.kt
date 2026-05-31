@@ -30,6 +30,9 @@ enum class Devices {
 data class Update(val device: Devices, val power: Int)
 
 @Serializable
+enum class ManagerMode { AUTO, MANUAL }
+
+@Serializable
 sealed class Message {
     // Messages from server
     @Serializable
@@ -38,6 +41,8 @@ sealed class Message {
     data class Authenticated(val username: String) : Message()
     @Serializable
     data class Unauthorized(val username: String) : Message()
+    @Serializable
+    data class ModeUpdate(val mode: ManagerMode) : Message()
 }
 
 @Serializable
@@ -45,6 +50,7 @@ sealed class ClientMessage {
     // Messages from client
     @Serializable data class SetCharging(val chargingState: ChargingState) : ClientMessage()
     @Serializable data class Authenticate(val username : String, val password: String) : ClientMessage()
+    @Serializable data class SetMode(val mode: ManagerMode) : ClientMessage()
 }
 
 fun deserializeMessage(json: String): Message {

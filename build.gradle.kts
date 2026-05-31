@@ -17,6 +17,13 @@ tasks {
     shadowJar {
         mergeServiceFiles()
     }
+
+    register<JavaExec>("batteryWatchdogTest") {
+        group = "tools"
+        description = "Arm SMA battery Modbus control and poll, to probe the inverter watchdog."
+        mainClass.set("io.konektis.tools.BatteryWatchdogTestKt")
+        classpath = sourceSets["main"].runtimeClasspath
+    }
 }
 
 dependencies {

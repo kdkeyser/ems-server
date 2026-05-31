@@ -7,6 +7,7 @@ import io.konektis.ems.data.model.ChargingState
 import io.konektis.ems.data.model.ClientMessage
 import io.konektis.ems.data.model.DeviceHealth
 import io.konektis.ems.data.model.DeviceStatus
+import io.konektis.ems.data.model.ManagerMode
 import io.konektis.ems.data.model.StatusState
 import io.konektis.ems.ui.dashboard.DashboardViewModel
 import kotlinx.coroutines.Dispatchers
@@ -76,5 +77,19 @@ class DashboardViewModelTest {
         yield()
         assertEquals(1, sent.size)
         assertEquals(ClientMessage.SetCharging(ChargingState.NotCharging), sent.first())
+    }
+
+    @Test
+    fun `setMode forwards SetMode command to sendCommand`() = runTest {
+        val sent = mutableListOf<ClientMessage>()
+        val vm = DashboardViewModel(
+            statusFlow = flowOf(),
+            controlState = MutableStateFlow(ControlState.Authenticated),
+            sendCommand = { sent.add(it) }
+        )
+        vm.setMode(ManagerMode.MANUAL)
+        yield()
+        assertEquals(1, sent.size)
+        assertEquals(ClientMessage.SetMode(ManagerMode.MANUAL), sent.first())
     }
 }

@@ -31,6 +31,7 @@ fun EmsNavHost(app: EmsApplication) {
         DashboardViewModel(
             statusFlow   = app.component.statusWsClient.statusFlow,
             controlState = app.component.controlWsClient.connectionState,
+            mode         = app.component.controlWsClient.mode,
             sendCommand  = { app.component.controlWsClient.send(it) }
         )
     })

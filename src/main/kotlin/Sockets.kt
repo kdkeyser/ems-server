@@ -53,6 +53,17 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
                 }
             }
 
+            // Push EMS AUTO/MANUAL mode to the client whenever it changes (once authenticated).
+            // The current value is also sent explicitly on successful auth below, because this
+            // collector's initial emission is dropped while authenticated is still false.
+            val modeJob = launch {
+                energyManager.modeFlow.collect { mode ->
+                    if (authenticated) {
+                        send(Json.encodeToString(Message.ModeUpdate(mode) as Message))
+                    }
+                }
+            }
+
             incoming.consumeEach { frame ->
                 if (frame is Frame.Text) {
                     val text = frame.readText()
@@ -62,6 +73,8 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
                                 if (message.username == wsConfig.username && message.password == wsConfig.password) {
                                     authenticated = true
                                     send(Json.encodeToString(Message.Authenticated(message.username) as Message))
+                                    // Send the current mode immediately so the client reflects it on connect.
+                                    send(Json.encodeToString(Message.ModeUpdate(energyManager.modeFlow.value) as Message))
                                 } else {
                                     send(Json.encodeToString(Message.Unauthorized(message.username) as Message))
                                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication failed"))

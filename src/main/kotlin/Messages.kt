@@ -4,15 +4,21 @@ import kotlinx.serialization.*
 import kotlinx.serialization.json.*
 import kotlin.random.Random
 
+// NOTE: every sealed subclass below pins an explicit @SerialName. kotlinx-serialization
+// otherwise defaults the polymorphic "type" discriminator to the fully-qualified class name,
+// which differs between this server (io.konektis) and the Android app
+// (io.konektis.ems.data.model) and would make cross-process control messages fail to decode.
+// These names MUST stay in sync with the app's WsMessage.kt.
+
 @Serializable
 sealed class ChargingState {
-    @Serializable
+    @Serializable @SerialName("NotCharging")
     class NotCharging() : ChargingState()
 
-    @Serializable
+    @Serializable @SerialName("ChargingWithExcessPower")
     class ChargingWithExcessPower() : ChargingState()
 
-    @Serializable
+    @Serializable @SerialName("ChargingWithMaxPower")
     data class ChargingWithMaxPower(val maxPower: UInt) : ChargingState()
 }
 
@@ -35,22 +41,25 @@ enum class ManagerMode { AUTO, MANUAL }
 @Serializable
 sealed class Message {
     // Messages from server
-    @Serializable
+    @Serializable @SerialName("PowerUsageUpdate")
     data class PowerUsageUpdate(val updates: List<Update>) : Message()
-    @Serializable
+    @Serializable @SerialName("Authenticated")
     data class Authenticated(val username: String) : Message()
-    @Serializable
+    @Serializable @SerialName("Unauthorized")
     data class Unauthorized(val username: String) : Message()
-    @Serializable
+    @Serializable @SerialName("ModeUpdate")
     data class ModeUpdate(val mode: ManagerMode) : Message()
 }
 
 @Serializable
 sealed class ClientMessage {
     // Messages from client
-    @Serializable data class SetCharging(val chargingState: ChargingState) : ClientMessage()
-    @Serializable data class Authenticate(val username : String, val password: String) : ClientMessage()
-    @Serializable data class SetMode(val mode: ManagerMode) : ClientMessage()
+    @Serializable @SerialName("SetCharging")
+    data class SetCharging(val chargingState: ChargingState) : ClientMessage()
+    @Serializable @SerialName("Authenticate")
+    data class Authenticate(val username : String, val password: String) : ClientMessage()
+    @Serializable @SerialName("SetMode")
+    data class SetMode(val mode: ManagerMode) : ClientMessage()
 }
 
 fun deserializeMessage(json: String): Message {

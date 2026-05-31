@@ -5,8 +5,10 @@ import androidx.lifecycle.viewModelScope
 import io.konektis.ems.data.ControlState
 import io.konektis.ems.data.model.ChargingState
 import io.konektis.ems.data.model.ClientMessage
+import io.konektis.ems.data.model.ManagerMode
 import io.konektis.ems.data.model.StatusState
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -15,6 +17,7 @@ import kotlinx.coroutines.launch
 class DashboardViewModel(
     statusFlow: Flow<StatusState>,
     val controlState: StateFlow<ControlState>,
+    val mode: StateFlow<ManagerMode?> = MutableStateFlow(null),
     private val sendCommand: suspend (ClientMessage) -> Unit
 ) : ViewModel() {
 
@@ -27,6 +30,12 @@ class DashboardViewModel(
     fun setCharging(state: ChargingState) {
         viewModelScope.launch {
             sendCommand(ClientMessage.SetCharging(state))
+        }
+    }
+
+    fun setMode(mode: ManagerMode) {
+        viewModelScope.launch {
+            sendCommand(ClientMessage.SetMode(mode))
         }
     }
 }

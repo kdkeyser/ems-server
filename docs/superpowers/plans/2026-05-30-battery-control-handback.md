@@ -572,10 +572,11 @@ private fun charger(power: Int?): Charger = mockk<Charger>(relaxed = true).also 
 private fun config() = Config(
     grid = mockk(relaxed = true),
     devices = DevicesConfig(
-        charger = listOf(ChargerConfig(ChargerType.WebastoUnite, "c", "h", ChargingCurrent(6u, 32u)))
+        charger = listOf(ChargerConfig(ChargerType.WebastoUnite, "c", "h", ChargingCurrent(6.0, 32.0)))
     ),
-    refreshThreads = 1,
-    websocket = mockk(relaxed = true)
+    ocpp = mockk(relaxed = true),   // required: Config has no default for ocpp
+    websocket = mockk(relaxed = true),
+    refreshThreads = 1
 )
 
 class EnergyManagerTest {
@@ -1058,5 +1059,5 @@ git commit -m "docs: document battery control hand-back behavior"
 - **Spec coverage:** command model + guard (Tasks 1–3) ✓; fix ignored write result — surfaced as thrown exception through the seam (Task 3) ✓; three-tier control + degraded law + blind counter (Tasks 4, 6) ✓; MANUAL = release all, transition-once (Task 6) ✓; `SetMode` over `/ws` + mode reported back via `ModeUpdate`/`modeFlow` (Tasks 5, 7) ✓; graceful shutdown 803 (Task 8) ✓; watchdog tool with run-on-hardware TODO (Task 9) ✓; Android follow-up remains a documented out-of-scope note (spec) ✓.
 - **Charger release best-effort:** Task 6 `releaseAll` documents the keepalive-stop TODO; no charger command is sent in MANUAL/degraded. ✓
 - **Type consistency:** `BatteryCommand.SetPower`/`ReleaseToInverter`, `ControlDecisions.batteryCommand`, `Strategy.decide`/`decideDegraded`, `Battery.releaseToInverter`, `EnergyManager.tick`/`setMode`/`Mode`, `ManagerMode`, `Message.ModeUpdate`, `ClientMessage.SetMode`, `BLIND_RELEASE_TICKS` are used consistently across tasks.
-- **Known adaptation point:** the `EnergyManagerTest` `config()` helper and the `Sockets.kt`/`Application.kt` edits assume the current `Config`/`module` shapes read during planning; if a constructor differs at implementation time, adapt the helper/signature to match (the data the manager actually reads is the charger min/max amps).
+- **Config shape verified:** the `EnergyManagerTest` `config()` helper matches the real `Config` constructor read from `config/Config.kt` — `ocpp: OcppConfig` is required (no default) and is supplied via `mockk`; `ChargingCurrent` takes `Double` (`6.0, 32.0`), not UInt. Named arguments make field order irrelevant. The `Sockets.kt`/`Application.kt` edits still assume the current `module` shape read during planning; if that signature differs at implementation time, adapt it (the data the manager actually reads is the charger min/max amps).
 - **Modeupdate on connect:** clients learn the mode when they send `SetMode` or via `modeFlow`; wiring the initial push into the existing `emsStateFlow.collect` block is optional polish, not required by the spec, so it is left out (YAGNI).

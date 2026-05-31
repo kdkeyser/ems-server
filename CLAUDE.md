@@ -55,7 +55,11 @@ All `power: Int` fields in `EMSState` and `Update` use: **negative = producing/e
 
 - **SMASolar**: when the inverter is off (no sunlight), Modbus register 30775 returns `Int.MIN_VALUE`. Treat as 0W.
 - **Webasto**: requires a Modbus keepalive write to register 6000 every <30 seconds or it drops remote control.
-- **SMABattery**: write 802 to register 40151 to enable Modbus power control *before* writing target power to register 40149. Write 803 to disable.
+- **SMABattery**: write 802 to register 40151 to enable Modbus power control *before* writing
+  target power to register 40149. Write 803 to release control back to the inverter. The EMS
+  holds control only while steering and releases (803) on MANUAL mode, on grid/battery data
+  going blind for ~30s, and on graceful shutdown. The inverter's own watchdog is too slow
+  (≥15 min) to rely on for crash recovery.
 - **DataCollector**: runs on a fixed-size thread pool (`config.refreshThreads`, default 50). Modbus calls are blocking; they run on `Dispatchers.IO`.
 
 ## Build & Run

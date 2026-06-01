@@ -7,6 +7,11 @@ import io.konektis.ems.EnergyManager
 import io.konektis.ems.Strategy
 import io.konektis.ems.SurplusPriorityStrategy
 import io.konektis.ems.SimpleGridCompensationStrategy
+import io.konektis.ocpp.OcppService
+import io.konektis.ocpp.db.ChargePointStore
+import io.konektis.ocpp.db.ChargerSettingsStore
+import io.konektis.ocpp.db.IdTagStore
+import io.konektis.ocpp.db.TransactionStore
 import io.konektis.ocpp.db.openDatabase
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -52,4 +57,12 @@ interface AppModule {
     @ApplicationScope
     @Provides
     fun provideDatabase(config: Config): Database = openDatabase(config.database.path)
+
+    @ApplicationScope
+    @Provides
+    fun provideOcppService(config: Config, database: Database): OcppService =
+        OcppService(
+            ChargePointStore(database), IdTagStore(database),
+            ChargerSettingsStore(database), TransactionStore(database), config.ocpp,
+        ).also { it.initStores() }
 }

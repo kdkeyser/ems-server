@@ -21,13 +21,7 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.*
 import org.slf4j.event.*
 
-fun Application.configureDatabases() {
-    val database = Database.connect(
-        url = "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1",
-        user = "root",
-        driver = "org.h2.Driver",
-        password = "",
-    )
+fun Application.configureDatabases(database: Database) {
     val userService = UserService(database)
     routing {
         authenticate("auth-basic") {

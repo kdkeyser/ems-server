@@ -1,0 +1,225 @@
+package io.konektis.ocpp
+
+import io.klogging.Klogging
+import io.konektis.config.OcppConfig
+import io.konektis.ocpp.db.*
+import io.ktor.websocket.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.*
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+
+// ---- Live (in-memory) state ----
+
+class ConnectorState(
+    val connectorId: Int,
+    var status: ChargePointStatus = ChargePointStatus.Available,
+    var errorCode: ChargePointErrorCode = ChargePointErrorCode.NoError,
+    var currentTransactionId: Int? = null,
+    var lastPowerW: Int? = null,
+)
+
+class ChargePointSession(
+    val chargePointId: String,
+    val session: DefaultWebSocketSession,
+    var vendor: String? = null,
+    var model: String? = null,
+    var smartChargingSupported: Boolean = false,
+    var powerImportSeen: Boolean = false,
+    var registrationStatus: RegistrationStatus = RegistrationStatus.Pending,
+    val connectors: MutableMap<Int, ConnectorState> = ConcurrentHashMap(),
+    val activeTransactions: MutableMap<Int, ActiveTransaction> = ConcurrentHashMap(),
+)
+
+data class ActiveTransaction(
+    val transactionId: Int, val connectorId: Int, val idTag: String, val startTime: Instant, val meterStart: Int,
+)
+
+// ---- Serializable view models pushed to the webpage ----
+
+@Serializable
+data class OcppState(val chargePoints: List<OcppChargePointView>)
+
+@Serializable
+data class OcppChargePointView(
+    val chargePointId: String,
+    val online: Boolean,
+    val vendor: String?,
+    val model: String?,
+    val smartChargingSupported: Boolean,
+    val powerReadable: Boolean,
+    val connectors: List<OcppConnectorView>,
+)
+
+@Serializable
+data class OcppConnectorView(val connectorId: Int, val status: String, val powerW: Int?, val transactionId: Int?)
+
+class OcppService(
+    private val chargePoints: ChargePointStore,
+    private val idTags: IdTagStore,
+    private val settings: ChargerSettingsStore,
+    private val transactions: TransactionStore,
+    private val config: OcppConfig,
+) : Klogging {
+
+    private val sessions = ConcurrentHashMap<String, ChargePointSession>()
+    private val transactionIdCounter = AtomicInteger(1)
+
+    private val _stateFlow = MutableStateFlow(OcppState(emptyList()))
+    val stateFlow: StateFlow<OcppState> = _stateFlow.asStateFlow()
+
+    val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = false }
+
+    fun initStores() {
+        chargePoints.init(); idTags.init(); settings.init(); transactions.init()
+    }
+
+    fun getSession(id: String): ChargePointSession? = sessions[id]
+
+    suspend fun registerSession(chargePointId: String, session: DefaultWebSocketSession) {
+        sessions[chargePointId] = ChargePointSession(chargePointId, session)
+        logger.info("Registered charge point $chargePointId")
+        recomputeState()
+    }
+
+    suspend fun unregisterSession(chargePointId: String) {
+        sessions.remove(chargePointId)
+        logger.info("Unregistered charge point $chargePointId")
+        recomputeState()
+    }
+
+    suspend fun handleBootNotification(chargePointId: String, request: BootNotificationRequest): BootNotificationResponse {
+        logger.info("BootNotification $chargePointId vendor=${request.chargePointVendor} model=${request.chargePointModel}")
+        chargePoints.recordBoot(chargePointId, request.chargePointVendor, request.chargePointModel, request.firmwareVersion)
+        val existing = chargePoints.get(chargePointId)
+        val accepted = when {
+            existing?.accepted == true -> true
+            config.acceptUnknownChargePoints -> { chargePoints.setAccepted(chargePointId, true); true }
+            else -> false
+        }
+        val status = if (accepted) RegistrationStatus.Accepted else RegistrationStatus.Pending
+        sessions[chargePointId]?.apply {
+            vendor = request.chargePointVendor
+            model = request.chargePointModel
+            registrationStatus = status
+            smartChargingSupported = existing?.smartChargingSupported ?: false
+            powerImportSeen = existing?.powerImportSeen ?: false
+        }
+        recomputeState()
+        return BootNotificationResponse(status, currentTimestamp(), config.heartbeatInterval)
+    }
+
+    fun handleHeartbeat(chargePointId: String): HeartbeatResponse = HeartbeatResponse(currentTimestamp())
+
+    suspend fun handleAuthorize(chargePointId: String, request: AuthorizeRequest): AuthorizeResponse =
+        AuthorizeResponse(IdTagInfo(status = authorizeTag(request.idTag)))
+
+    private suspend fun authorizeTag(idTag: String): AuthorizationStatus {
+        if (idTag.isBlank()) return AuthorizationStatus.Invalid
+        val record = idTags.get(idTag)
+        return when {
+            record != null -> runCatching { AuthorizationStatus.valueOf(record.status) }.getOrDefault(AuthorizationStatus.Invalid)
+            config.acceptUnknownIdTags -> AuthorizationStatus.Accepted
+            else -> AuthorizationStatus.Invalid
+        }
+    }
+
+    suspend fun handleStartTransaction(chargePointId: String, request: StartTransactionRequest): StartTransactionResponse {
+        val transactionId = transactionIdCounter.getAndIncrement()
+        sessions[chargePointId]?.let { s ->
+            s.activeTransactions[transactionId] =
+                ActiveTransaction(transactionId, request.connectorId, request.idTag, Instant.now(), request.meterStart)
+            s.connectors.getOrPut(request.connectorId) { ConnectorState(request.connectorId) }.apply {
+                currentTransactionId = transactionId
+                status = ChargePointStatus.Charging
+            }
+        }
+        recomputeState()
+        return StartTransactionResponse(transactionId, IdTagInfo(status = authorizeTag(request.idTag)))
+    }
+
+    suspend fun handleStopTransaction(chargePointId: String, request: StopTransactionRequest): StopTransactionResponse {
+        val s = sessions[chargePointId]
+        val tx = s?.activeTransactions?.remove(request.transactionId)
+        if (tx != null) {
+            s.connectors[tx.connectorId]?.apply { currentTransactionId = null; status = ChargePointStatus.Available }
+            transactions.record(
+                transactionId = tx.transactionId, chargePointId = chargePointId, connectorId = tx.connectorId,
+                idTag = tx.idTag, meterStart = tx.meterStart, meterStop = request.meterStop,
+                startTime = tx.startTime.toEpochMilli(), stopTime = Instant.now().toEpochMilli(),
+                stopReason = request.reason?.name,
+            )
+        }
+        recomputeState()
+        return StopTransactionResponse(IdTagInfo(status = AuthorizationStatus.Accepted))
+    }
+
+    suspend fun handleStatusNotification(chargePointId: String, request: StatusNotificationRequest): StatusNotificationResponse {
+        sessions[chargePointId]?.connectors?.getOrPut(request.connectorId) { ConnectorState(request.connectorId) }?.apply {
+            status = request.status; errorCode = request.errorCode
+        }
+        recomputeState()
+        return StatusNotificationResponse()
+    }
+
+    suspend fun handleMeterValues(chargePointId: String, request: MeterValuesRequest): MeterValuesResponse {
+        val powerW = extractActivePowerW(request)
+        if (powerW != null) {
+            sessions[chargePointId]?.connectors?.getOrPut(request.connectorId) { ConnectorState(request.connectorId) }?.lastPowerW = powerW
+            recomputeState()
+        }
+        return MeterValuesResponse()
+    }
+
+    /** Pull Power.Active.Import (W) from the sampled values, if present. */
+    private fun extractActivePowerW(request: MeterValuesRequest): Int? {
+        for (mv in request.meterValue) for (sv in mv.sampledValue) {
+            if (sv.measurand?.name == "Power.Active.Import") {
+                val v = sv.value.toDoubleOrNull() ?: continue
+                val watts = if (sv.unit == UnitOfMeasure.kW) v * 1000 else v
+                return watts.toInt()
+            }
+        }
+        return null
+    }
+
+    suspend fun handleDataTransfer(chargePointId: String, request: DataTransferRequest): DataTransferResponse =
+        DataTransferResponse(status = DataTransferStatus.Accepted, data = null)
+
+    suspend fun recentTransactions(limit: Int): List<TransactionRecord> = transactions.recent(limit)
+
+    /** Latest active-power reading (W) for a connector, or null until one arrives. */
+    fun latestPowerW(chargePointId: String, connectorId: Int): Int? =
+        sessions[chargePointId]?.connectors?.get(connectorId)?.lastPowerW
+
+    private fun recomputeState() {
+        _stateFlow.value = OcppState(
+            sessions.values.map { s ->
+                OcppChargePointView(
+                    chargePointId = s.chargePointId,
+                    online = true,
+                    vendor = s.vendor,
+                    model = s.model,
+                    smartChargingSupported = s.smartChargingSupported,
+                    powerReadable = s.powerImportSeen,
+                    connectors = s.connectors.values.map { c ->
+                        OcppConnectorView(c.connectorId, c.status.name, c.lastPowerW, c.currentTransactionId)
+                    }.sortedBy { it.connectorId },
+                )
+            }.sortedBy { it.chargePointId },
+        )
+    }
+
+    // Replaced with real correlation in Task 4.
+    fun completeCall(uniqueId: String, payload: JsonObject) {}
+    fun failCall(uniqueId: String, reason: String) {}
+
+    private fun currentTimestamp(): String =
+        Instant.now().atOffset(ZoneOffset.UTC).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+}

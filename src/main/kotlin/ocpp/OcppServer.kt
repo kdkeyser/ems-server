@@ -1,280 +1,112 @@
 package io.konektis.ocpp
 
+import io.klogging.logger
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.serialization.json.*
-import kotlin.time.Duration.Companion.seconds
 
-/**
- * OCPP 1.6J Server Configuration
- */
-fun Application.configureOcppServer() {
-    val sessionManager = OcppSessionManager()
-    val messageHandler = OcppMessageHandler(sessionManager)
-    
-  /*  install(WebSockets) {
-        pingPeriod = 30.seconds
-        timeout = 60.seconds
-        maxFrameSize = Long.MAX_VALUE
-        masking = false
-    }*/
-    
+private const val OCPP_SUBPROTOCOL = "ocpp1.6"
+
+/** Wire the OCPP charge-point WebSocket endpoint. WebSockets plugin is installed in configureSockets. */
+fun Application.configureOcppServer(service: OcppService) {
+    val handler = OcppMessageHandler(service)
     routing {
-        // OCPP WebSocket endpoint with charge point ID in path
-        // Format: /ocpp/{chargePointId}
-        webSocket("/ocpp/{chargePointId}") {
+        webSocket("/ocpp/{chargePointId}", protocol = OCPP_SUBPROTOCOL) {
             val chargePointId = call.parameters["chargePointId"] ?: run {
-                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Missing charge point ID"))
-                return@webSocket
+                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Missing charge point ID")); return@webSocket
             }
-            
-            messageHandler.handleConnection(chargePointId, this)
+            handler.handleConnection(chargePointId, this)
         }
-        
-        // Alternative endpoint format: /ocpp/1.6/{chargePointId}
-        webSocket("/ocpp/1.6/{chargePointId}") {
+        webSocket("/ocpp/1.6/{chargePointId}", protocol = OCPP_SUBPROTOCOL) {
             val chargePointId = call.parameters["chargePointId"] ?: run {
-                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Missing charge point ID"))
-                return@webSocket
+                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Missing charge point ID")); return@webSocket
             }
-            
-            messageHandler.handleConnection(chargePointId, this)
+            handler.handleConnection(chargePointId, this)
         }
     }
 }
 
-/**
- * OCPP Message Handler - processes incoming OCPP messages
- */
-class OcppMessageHandler(
-    private val sessionManager: OcppSessionManager
-) {
-    private val json = Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-        prettyPrint = false
-    }
+class OcppMessageHandler(private val service: OcppService) {
+    private val log = logger("io.konektis.ocpp.handler")
+    private val json = service.json
 
-    /**
-     * Handle a new WebSocket connection from a charge point
-     */
     suspend fun handleConnection(chargePointId: String, session: DefaultWebSocketSession) {
-        println("[INFO] New OCPP connection from charge point: $chargePointId")
-        
+        log.info("New OCPP connection from {cp}", chargePointId)
         try {
-            // Register the session
-            sessionManager.registerSession(chargePointId, session)
-            
-            // Process incoming messages
+            service.registerSession(chargePointId, session)
             session.incoming.consumeEach { frame ->
                 if (frame is Frame.Text) {
                     val text = frame.readText()
-                    println("[DEBUG] Received from $chargePointId: $text")
-                    
+                    log.debug("recv from {cp}: {msg}", chargePointId, text)
                     try {
-                        val response = processMessage(chargePointId, text)
-                        if (response != null) {
-                            session.send(Frame.Text(response))
-                            println("[DEBUG] Sent to $chargePointId: $response")
-                        }
+                        processMessage(chargePointId, text)?.let { session.send(Frame.Text(it)) }
                     } catch (e: Exception) {
-                        println("[ERROR] Error processing message from $chargePointId: $text - ${e.message}")
-                        
-                        // Try to extract message ID for error response
-                        val messageId = try {
-                            val jsonArray = Json.parseToJsonElement(text).jsonArray
-                            if (jsonArray.size >= 2) jsonArray[1].jsonPrimitive.content else "unknown"
-                        } catch (ex: Exception) {
-                            "unknown"
-                        }
-                        
-                        val errorResponse = createErrorResponse(
-                            messageId,
-                            ErrorCode.InternalError,
-                            e.message ?: "Unknown error"
-                        )
-                        session.send(Frame.Text(errorResponse))
+                        log.error("error handling message from {cp}: {err}", chargePointId, e.message)
+                        val messageId = runCatching {
+                            Json.parseToJsonElement(text).jsonArray[1].jsonPrimitive.content
+                        }.getOrDefault("unknown")
+                        session.send(Frame.Text(errorResponse(messageId, ErrorCode.InternalError, e.message ?: "error")))
                     }
                 }
             }
         } catch (e: Exception) {
-            println("[ERROR] Connection error for charge point: $chargePointId - ${e.message}")
+            log.error("connection error for {cp}: {err}", chargePointId, e.message)
         } finally {
-            // Unregister the session when connection closes
-            sessionManager.unregisterSession(chargePointId)
-            println("[INFO] OCPP connection closed for charge point: $chargePointId")
+            service.unregisterSession(chargePointId)
+            log.info("OCPP connection closed for {cp}", chargePointId)
         }
     }
 
-    /**
-     * Process an incoming OCPP message
-     */
-    private fun processMessage(chargePointId: String, message: String): String? {
-        // Parse the JSON array format: [MessageTypeId, UniqueId, Action, Payload]
-        val jsonArray = Json.parseToJsonElement(message).jsonArray
-        
-        if (jsonArray.size < 3) {
-            throw IllegalArgumentException("Invalid OCPP message format")
-        }
-        
-        val messageTypeId = jsonArray[0].jsonPrimitive.int
-        val uniqueId = jsonArray[1].jsonPrimitive.content
-        
+    private suspend fun processMessage(chargePointId: String, message: String): String? {
+        val arr = Json.parseToJsonElement(message).jsonArray
+        require(arr.size >= 3) { "Invalid OCPP message format" }
+        val messageTypeId = arr[0].jsonPrimitive.int
+        val uniqueId = arr[1].jsonPrimitive.content
         return when (messageTypeId) {
             MessageType.CALL.value -> {
-                // This is a request from the charge point
-                val action = jsonArray[2].jsonPrimitive.content
-                val payload = if (jsonArray.size > 3) jsonArray[3].jsonObject else JsonObject(emptyMap())
-                
+                val action = arr[2].jsonPrimitive.content
+                val payload = if (arr.size > 3) arr[3].jsonObject else JsonObject(emptyMap())
                 handleCall(chargePointId, uniqueId, action, payload)
             }
-            
             MessageType.CALL_RESULT.value -> {
-                // This is a response to our request
-                val payload = if (jsonArray.size > 2) jsonArray[2].jsonObject else JsonObject(emptyMap())
-                handleCallResult(chargePointId, uniqueId, payload)
-                null // No response needed
+                val payload = if (arr.size > 2) arr[2].jsonObject else JsonObject(emptyMap())
+                service.completeCall(uniqueId, payload); null
             }
-            
             MessageType.CALL_ERROR.value -> {
-                // This is an error response to our request
-                val errorCode = if (jsonArray.size > 2) jsonArray[2].jsonPrimitive.content else "Unknown"
-                val errorDescription = if (jsonArray.size > 3) jsonArray[3].jsonPrimitive.content else ""
-                handleCallError(chargePointId, uniqueId, errorCode, errorDescription)
-                null // No response needed
+                val code = if (arr.size > 2) arr[2].jsonPrimitive.content else "Unknown"
+                val desc = if (arr.size > 3) arr[3].jsonPrimitive.content else ""
+                service.failCall(uniqueId, "$code: $desc"); null
             }
-            
-            else -> {
-                throw IllegalArgumentException("Unknown message type: $messageTypeId")
-            }
+            else -> throw IllegalArgumentException("Unknown message type: $messageTypeId")
         }
     }
 
-    /**
-     * Handle a CALL message (request from charge point)
-     */
-    private fun handleCall(
-        chargePointId: String,
-        uniqueId: String,
-        action: String,
-        payload: JsonObject
-    ): String {
-        println("[INFO] Processing $action from $chargePointId")
-        
-        val responsePayload = when (action) {
-            Action.BootNotification.name -> {
-                val request = json.decodeFromJsonElement<BootNotificationRequest>(payload)
-                val response = sessionManager.handleBootNotification(chargePointId, request)
-                json.encodeToJsonElement(response).jsonObject
-            }
-            
-            Action.Heartbeat.name -> {
-                val response = sessionManager.handleHeartbeat(chargePointId)
-                json.encodeToJsonElement(response).jsonObject
-            }
-            
-            Action.Authorize.name -> {
-                val request = json.decodeFromJsonElement<AuthorizeRequest>(payload)
-                val response = sessionManager.handleAuthorize(chargePointId, request)
-                json.encodeToJsonElement(response).jsonObject
-            }
-            
-            Action.StartTransaction.name -> {
-                val request = json.decodeFromJsonElement<StartTransactionRequest>(payload)
-                val response = sessionManager.handleStartTransaction(chargePointId, request)
-                json.encodeToJsonElement(response).jsonObject
-            }
-            
-            Action.StopTransaction.name -> {
-                val request = json.decodeFromJsonElement<StopTransactionRequest>(payload)
-                val response = sessionManager.handleStopTransaction(chargePointId, request)
-                json.encodeToJsonElement(response).jsonObject
-            }
-            
-            Action.StatusNotification.name -> {
-                val request = json.decodeFromJsonElement<StatusNotificationRequest>(payload)
-                val response = sessionManager.handleStatusNotification(chargePointId, request)
-                json.encodeToJsonElement(response).jsonObject
-            }
-            
-            Action.MeterValues.name -> {
-                val request = json.decodeFromJsonElement<MeterValuesRequest>(payload)
-                val response = sessionManager.handleMeterValues(chargePointId, request)
-                json.encodeToJsonElement(response).jsonObject
-            }
-            
-            Action.DataTransfer.name -> {
-                val request = json.decodeFromJsonElement<DataTransferRequest>(payload)
-                val response = sessionManager.handleDataTransfer(chargePointId, request)
-                json.encodeToJsonElement(response).jsonObject
-            }
-            
-            else -> {
-                println("[WARN] Unsupported action: $action from $chargePointId")
-                return createErrorResponse(
-                    uniqueId,
-                    ErrorCode.NotSupported,
-                    "Action $action is not supported"
-                )
-            }
+    private suspend fun handleCall(chargePointId: String, uniqueId: String, action: String, payload: JsonObject): String {
+        val responsePayload: JsonObject = when (action) {
+            Action.BootNotification.name ->
+                json.encodeToJsonElement(service.handleBootNotification(chargePointId, json.decodeFromJsonElement(payload))).jsonObject
+            Action.Heartbeat.name ->
+                json.encodeToJsonElement(service.handleHeartbeat(chargePointId)).jsonObject
+            Action.Authorize.name ->
+                json.encodeToJsonElement(service.handleAuthorize(chargePointId, json.decodeFromJsonElement(payload))).jsonObject
+            Action.StartTransaction.name ->
+                json.encodeToJsonElement(service.handleStartTransaction(chargePointId, json.decodeFromJsonElement(payload))).jsonObject
+            Action.StopTransaction.name ->
+                json.encodeToJsonElement(service.handleStopTransaction(chargePointId, json.decodeFromJsonElement(payload))).jsonObject
+            Action.StatusNotification.name ->
+                json.encodeToJsonElement(service.handleStatusNotification(chargePointId, json.decodeFromJsonElement(payload))).jsonObject
+            Action.MeterValues.name ->
+                json.encodeToJsonElement(service.handleMeterValues(chargePointId, json.decodeFromJsonElement(payload))).jsonObject
+            Action.DataTransfer.name ->
+                json.encodeToJsonElement(service.handleDataTransfer(chargePointId, json.decodeFromJsonElement(payload))).jsonObject
+            else -> return errorResponse(uniqueId, ErrorCode.NotSupported, "Action $action is not supported")
         }
-        
-        return createCallResult(uniqueId, responsePayload)
+        return buildJsonArray { add(MessageType.CALL_RESULT.value); add(uniqueId); add(responsePayload) }.toString()
     }
 
-    /**
-     * Handle a CALL_RESULT message (response from charge point)
-     */
-    private fun handleCallResult(
-        chargePointId: String,
-        uniqueId: String,
-        payload: JsonObject
-    ) {
-        println("[INFO] Received CallResult from $chargePointId for message $uniqueId")
-        // In production, match this with pending requests and resolve promises
-    }
-
-    /**
-     * Handle a CALL_ERROR message (error response from charge point)
-     */
-    private fun handleCallError(
-        chargePointId: String,
-        uniqueId: String,
-        errorCode: String,
-        errorDescription: String
-    ) {
-        println("[ERROR] Received CallError from $chargePointId for message $uniqueId: $errorCode - $errorDescription")
-        // In production, match this with pending requests and reject promises
-    }
-
-    /**
-     * Create a CALL_RESULT response
-     */
-    private fun createCallResult(uniqueId: String, payload: JsonObject): String {
-        return buildJsonArray {
-            add(MessageType.CALL_RESULT.value)
-            add(uniqueId)
-            add(payload)
-        }.toString()
-    }
-
-    /**
-     * Create a CALL_ERROR response
-     */
-    private fun createErrorResponse(
-        uniqueId: String,
-        errorCode: ErrorCode,
-        errorDescription: String
-    ): String {
-        return buildJsonArray {
-            add(MessageType.CALL_ERROR.value)
-            add(uniqueId)
-            add(errorCode.name)
-            add(errorDescription)
-            add(JsonObject(emptyMap()))
-        }.toString()
-    }
+    private fun errorResponse(uniqueId: String, code: ErrorCode, desc: String): String =
+        buildJsonArray { add(MessageType.CALL_ERROR.value); add(uniqueId); add(code.name); add(desc); add(JsonObject(emptyMap())) }.toString()
 }

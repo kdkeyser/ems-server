@@ -1,6 +1,10 @@
 package io.konektis.ocpp
 
+import io.konektis.config.OcppConfig
+import io.konektis.ocpp.db.*
 import io.ktor.client.*
+import io.ktor.client.request.*
+import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.websocket.*
 import io.ktor.client.plugins.websocket.WebSockets as ClientWebSockets
@@ -19,7 +23,12 @@ private fun Application.configureTestOcppServer() {
         maxFrameSize = Long.MAX_VALUE
         masking = false
     }
-    configureOcppServer()
+    val db = io.konektis.ocpp.freshTestDb()
+    val cfg = OcppConfig(enabled = true, heartbeatInterval = 300, connectionTimeout = 60,
+        callTimeoutSeconds = 1, autoProbeOnBoot = false)
+    val service = OcppService(ChargePointStore(db), IdTagStore(db), ChargerSettingsStore(db), TransactionStore(db), cfg)
+        .also { it.initStores() }
+    configureOcppServer(service)
 }
 
 class OcppServerTest {
@@ -39,7 +48,7 @@ class OcppServerTest {
             install(ClientWebSockets)
         }
 
-        client.webSocket("/ocpp/TEST001") {
+        client.webSocket("/ocpp/TEST001", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
             // Send BootNotification
             val bootNotification = buildJsonArray {
                 add(2) // CALL
@@ -79,7 +88,7 @@ class OcppServerTest {
             install(ClientWebSockets)
         }
 
-        client.webSocket("/ocpp/TEST002") {
+        client.webSocket("/ocpp/TEST002", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
             // Send Heartbeat
             val heartbeat = buildJsonArray {
                 add(2) // CALL
@@ -113,7 +122,7 @@ class OcppServerTest {
             install(ClientWebSockets)
         }
 
-        client.webSocket("/ocpp/TEST003") {
+        client.webSocket("/ocpp/TEST003", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
             // Send Authorize
             val authorize = buildJsonArray {
                 add(2) // CALL
@@ -151,7 +160,7 @@ class OcppServerTest {
             install(ClientWebSockets)
         }
 
-        client.webSocket("/ocpp/TEST004") {
+        client.webSocket("/ocpp/TEST004", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
             // Send StartTransaction
             val startTransaction = buildJsonArray {
                 add(2) // CALL
@@ -193,7 +202,7 @@ class OcppServerTest {
             install(ClientWebSockets)
         }
 
-        client.webSocket("/ocpp/TEST005") {
+        client.webSocket("/ocpp/TEST005", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
             // First start a transaction
             val startTransaction = buildJsonArray {
                 add(2)
@@ -246,7 +255,7 @@ class OcppServerTest {
             install(ClientWebSockets)
         }
 
-        client.webSocket("/ocpp/TEST006") {
+        client.webSocket("/ocpp/TEST006", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
             // Send StatusNotification
             val statusNotification = buildJsonArray {
                 add(2)
@@ -281,7 +290,7 @@ class OcppServerTest {
             install(ClientWebSockets)
         }
 
-        client.webSocket("/ocpp/TEST007") {
+        client.webSocket("/ocpp/TEST007", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
             // Send MeterValues
             val meterValues = buildJsonArray {
                 add(2)
@@ -330,7 +339,7 @@ class OcppServerTest {
             install(ClientWebSockets)
         }
 
-        client.webSocket("/ocpp/TEST008") {
+        client.webSocket("/ocpp/TEST008", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
             // Send unsupported action
             val unsupportedAction = buildJsonArray {
                 add(2)
@@ -362,7 +371,7 @@ class OcppServerTest {
             install(ClientWebSockets)
         }
 
-        client.webSocket("/ocpp/TEST009") {
+        client.webSocket("/ocpp/TEST009", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
             // Send invalid message (not an array)
             send(Frame.Text("{\"invalid\": \"message\"}"))
 
@@ -387,7 +396,7 @@ class OcppServerTest {
         }
 
         // Connect two charge points simultaneously
-        client.webSocket("/ocpp/CP001") {
+        client.webSocket("/ocpp/CP001", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
             val bootNotification1 = buildJsonArray {
                 add(2)
                 add("cp1-1")
@@ -404,7 +413,7 @@ class OcppServerTest {
             assertEquals(3, array1[0].jsonPrimitive.int)
         }
 
-        client.webSocket("/ocpp/CP002") {
+        client.webSocket("/ocpp/CP002", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
             val bootNotification2 = buildJsonArray {
                 add(2)
                 add("cp2-1")
@@ -432,7 +441,7 @@ class OcppServerTest {
             install(ClientWebSockets)
         }
 
-        client.webSocket("/ocpp/TEST010") {
+        client.webSocket("/ocpp/TEST010", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
             // Send DataTransfer
             val dataTransfer = buildJsonArray {
                 add(2)

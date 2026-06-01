@@ -300,15 +300,16 @@ data class SampledValue(
     val unit: UnitOfMeasure? = null
 )
 
+@Serializable
 enum class ReadingContext {
-    `Interruption.Begin`,
-    `Interruption.End`,
-    `Sample.Clock`,
-    `Sample.Periodic`,
-    `Transaction.Begin`,
-    `Transaction.End`,
+    @SerialName("Interruption.Begin") InterruptionBegin,
+    @SerialName("Interruption.End") InterruptionEnd,
+    @SerialName("Sample.Clock") SampleClock,
+    @SerialName("Sample.Periodic") SamplePeriodic,
+    @SerialName("Transaction.Begin") TransactionBegin,
+    @SerialName("Transaction.End") TransactionEnd,
     Trigger,
-    Other
+    Other,
 }
 
 enum class ValueFormat {

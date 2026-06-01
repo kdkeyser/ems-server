@@ -96,6 +96,21 @@ class OcppServiceTest {
     }
 
     @Test
+    fun meterValuesWithContextDeserializesAndExtractsPower() = runTest {
+        val svc = newService()
+        svc.registerSession("CP1", mockk(relaxed = true))
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val payload = """
+            {"connectorId":1,"meterValue":[{"timestamp":"2026-01-01T00:00:00Z","sampledValue":[
+              {"value":"2300","context":"Sample.Periodic","measurand":"Power.Active.Import","unit":"W"}
+            ]}]}
+        """.trimIndent()
+        val req = json.decodeFromString<MeterValuesRequest>(payload)
+        svc.handleMeterValues("CP1", req)
+        assertEquals(2300, svc.latestPowerW("CP1", 1))
+    }
+
+    @Test
     fun authorizeRejectsBlankIdTag() = runTest {
         val svc = newService(acceptTags = true)
         svc.registerSession("CP1", mockk(relaxed = true))

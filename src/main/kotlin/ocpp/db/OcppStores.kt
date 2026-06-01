@@ -167,6 +167,10 @@ class TransactionStore(private val db: Database) {
         Unit
     }
 
+    fun maxTransactionId(): Int = transaction(db) {
+        OcppTransactions.selectAll().maxOfOrNull { it[OcppTransactions.transactionId] } ?: 0
+    }
+
     suspend fun recent(limit: Int): List<TransactionRecord> = dbQuery(db) {
         OcppTransactions.selectAll().orderBy(OcppTransactions.id, SortOrder.DESC).limit(limit).map {
             TransactionRecord(

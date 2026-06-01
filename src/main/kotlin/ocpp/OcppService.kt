@@ -78,6 +78,7 @@ class OcppService(
 
     fun initStores() {
         chargePoints.init(); idTags.init(); settings.init(); transactions.init()
+        transactionIdCounter.set(transactions.maxTransactionId() + 1)
     }
 
     fun getSession(id: String): ChargePointSession? = sessions[id]
@@ -180,7 +181,7 @@ class OcppService(
     /** Pull Power.Active.Import (W) from the sampled values, if present. */
     private fun extractActivePowerW(request: MeterValuesRequest): Int? {
         for (mv in request.meterValue) for (sv in mv.sampledValue) {
-            if (sv.measurand?.name == "Power.Active.Import") {
+            if (sv.measurand == Measurand.PowerActiveImport) {
                 val v = sv.value.toDoubleOrNull() ?: continue
                 val watts = if (sv.unit == UnitOfMeasure.kW) v * 1000 else v
                 return watts.toInt()

@@ -36,6 +36,7 @@ dependencies {
     implementation(libs.exposed.core)
     implementation(libs.exposed.jdbc)
     implementation(libs.h2)
+    implementation(libs.sqlite.jdbc)
     implementation(libs.ktor.server.call.logging)
     implementation(libs.ktor.server.sessions)
     implementation(libs.ktor.server.default.headers)

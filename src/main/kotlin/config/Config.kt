@@ -58,7 +58,18 @@ data class Devices(
 )
 
 @Serializable
-data class OcppConfig(val enabled: Boolean, val heartbeatInterval: Int, val connectionTimeout: Int)
+data class OcppConfig(
+    val enabled: Boolean,
+    val heartbeatInterval: Int,
+    val connectionTimeout: Int,
+    val callTimeoutSeconds: Int = 30,
+    val acceptUnknownChargePoints: Boolean = true,
+    val acceptUnknownIdTags: Boolean = true,
+    val autoProbeOnBoot: Boolean = true,
+)
+
+@Serializable
+data class DatabaseConfig(val path: String = "ems.db")
 
 @Serializable
 data class WebSocketConfig(val username: String, val password: String)
@@ -69,6 +80,7 @@ data class Config(
     val devices: Devices,
     val ocpp: OcppConfig,
     val websocket: WebSocketConfig = WebSocketConfig("user", "password"),
+    val database: DatabaseConfig = DatabaseConfig(),
     val refreshThreads : Int = 50
 )
 

@@ -7,6 +7,7 @@ import io.konektis.ems.EnergyManager
 import io.konektis.ems.Strategy
 import io.konektis.ems.SurplusPriorityStrategy
 import io.konektis.ems.SimpleGridCompensationStrategy
+import io.konektis.ocpp.db.openDatabase
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
@@ -14,6 +15,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import me.tatarka.inject.annotations.Provides
+import org.jetbrains.exposed.sql.Database
 
 interface AppModule {
 
@@ -46,4 +48,8 @@ interface AppModule {
     @Provides
     fun provideEnergyManager(world: World, config: Config, strategy: Strategy): EnergyManager =
         EnergyManager(world, config, strategy)
+
+    @ApplicationScope
+    @Provides
+    fun provideDatabase(config: Config): Database = openDatabase(config.database.path)
 }

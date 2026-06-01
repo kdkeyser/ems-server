@@ -13,4 +13,11 @@ class ConfigTest {
         assertEquals(1, config.devices.heatPump?.size)
         assertEquals(1, config.devices.charger?.size)
     }
+
+    @Test
+    fun testDatabaseDefaults() {
+        val config = _root_ide_package_.io.konektis.config.loadConfig("/config.yaml")
+        assertEquals("ems.db", config.database.path)
+        assertEquals(30, config.ocpp.callTimeoutSeconds)
+    }
 }

@@ -31,6 +31,11 @@ echo "NB_SETUP_KEY=<paste-setup-key>" > .env   # docker-compose reads this
 
 ## 3. Start the containers
 
+> **TerraMaster NAS (no Compose):** TOS does not support `docker compose`. Use
+> [`remote-access-terramaster-containers.md`](remote-access-terramaster-containers.md) instead of
+> this step — it sets up `ems-server` and `netbird` as individual `docker run` containers with the
+> same network/volume/capability settings — then return to step 4 below.
+
 ```bash
 docker compose up -d --build
 docker compose ps           # ems-server + netbird both "running"

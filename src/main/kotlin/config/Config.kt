@@ -1,8 +1,10 @@
 package io.konektis.config
 
 import com.sksamuel.hoplite.ConfigLoaderBuilder
+import com.sksamuel.hoplite.addFileSource
 import com.sksamuel.hoplite.addResourceSource
 import kotlinx.serialization.Serializable
+import java.io.File
 
 @Serializable
 data class ChargingCurrent(val min: Double, val max: Double)
@@ -93,9 +95,27 @@ data class Config(
     val refreshThreads : Int = 50
 )
 
-fun loadConfig(resource: String): Config {
-    return ConfigLoaderBuilder.default()
-        .addResourceSource(resource)
-        .build()
-        .loadConfigOrThrow<Config>()
+/**
+ * Loads config from an external file when one exists, otherwise from the bundled classpath resource.
+ *
+ * In a container the file lives at a mounted path (default `/config/config.yaml`, overridable with
+ * the `EMS_CONFIG` env var) so device IPs/credentials/DB path can change without rebuilding the image.
+ * Local runs and tests have no such file, so they fall back to the classpath `resource`.
+ *
+ * @param resource classpath resource to fall back to (e.g. "/config.yaml")
+ * @param filePath external file to prefer; defaults to $EMS_CONFIG or "/config/config.yaml".
+ *        Pass `null` to skip the file entirely (used by tests to force the resource path).
+ */
+fun loadConfig(
+    resource: String,
+    filePath: String? = System.getenv("EMS_CONFIG") ?: "/config/config.yaml",
+): Config {
+    val file = filePath?.let { File(it) }
+    val builder = ConfigLoaderBuilder.default()
+    val source = if (file != null && file.exists()) {
+        builder.addFileSource(file)
+    } else {
+        builder.addResourceSource(resource)
+    }
+    return source.build().loadConfigOrThrow<Config>()
 }

@@ -41,7 +41,7 @@ interface AppModule {
 
     @ApplicationScope
     @Provides
-    fun provideWorld(config: Config): World = World.fromConfig(config)
+    fun provideWorld(config: Config, ocppService: OcppService): World = World.fromConfig(config, ocppService)
 
     @Provides
     fun provideDataCollector(config: Config, world: World): DataCollector =

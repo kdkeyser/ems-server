@@ -39,9 +39,18 @@ data class HeatPump(val type: HeatPumpType, val name: String, val host: String)
 @Serializable
 enum class ChargerType {
     WebastoUnite,
+    OCPP,
 }
+
 @Serializable
-data class Charger(val type: ChargerType, val name: String, val host: String, val chargingCurrent: ChargingCurrent)
+data class Charger(
+    val type: ChargerType,
+    val name: String,
+    val host: String? = null,
+    val chargingCurrent: ChargingCurrent,
+    val chargePointId: String? = null,
+    val connectorId: Int = 1,
+)
 
 enum class BatteryType {
     SMA_Sunny_Boy_Storage,

@@ -215,6 +215,12 @@ class OcppService(
     fun latestPowerW(chargePointId: String, connectorId: Int): Int? =
         sessions[chargePointId]?.connectors?.get(connectorId)?.lastPowerW
 
+    /** True when the charge point is connected and advertised SmartCharging support. */
+    fun isPowerControlCapable(chargePointId: String): Boolean =
+        sessions[chargePointId]?.smartChargingSupported == true
+
+    suspend fun getChargerSettings(id: String): ChargerSettingsRecord? = settings.get(id)
+
     /** Update SmartCharging support from a GetConfiguration reply (SupportedFeatureProfiles). */
     suspend fun applyCapabilityProbe(chargePointId: String, response: GetConfigurationResponse) {
         val profiles = response.configurationKey

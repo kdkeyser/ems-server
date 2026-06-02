@@ -11,12 +11,14 @@ import io.konektis.devices.Solar.SMASolar
 import io.konektis.devices.battery.Battery
 import io.konektis.devices.battery.SMABattery
 import io.konektis.devices.charger.Charger
+import io.konektis.devices.charger.OcppCharger
 import io.konektis.devices.charger.Webasto
 import io.konektis.devices.grid.Grid
 import io.konektis.devices.grid.GridProperties
 import io.konektis.devices.grid.P1Meter
 import io.konektis.devices.smartConsumers.SmartConsumer
 import io.konektis.devices.solar.Solar
+import io.konektis.ocpp.OcppService
 
 data class World(
     val grid: Grid,
@@ -27,13 +29,14 @@ data class World(
     )
 {
     companion object {
-        fun fromConfig(config: Config): World {
+        fun fromConfig(config: Config, ocppService: OcppService): World {
             val grid = when (config.grid.type) {
                 GridMeterType.P1HomeWizard -> P1Meter(config.grid.host, GridProperties(config.grid.gridType))
             }
             val chargers = config.devices.charger.associate {
                 when (it.type) {
-                    ChargerType.WebastoUnite -> Pair(it.name, Webasto(it.host))
+                    ChargerType.WebastoUnite -> Pair(it.name, Webasto(it.host!!))
+                    ChargerType.OCPP -> Pair(it.name, OcppCharger(it.chargePointId!!, it.connectorId, ocppService))
                 }
             }
             val solar = config.devices.solar.associate {

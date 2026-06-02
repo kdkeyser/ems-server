@@ -55,43 +55,160 @@ async function api(path, opts) {
 }
 async function getJson(path) { return (await api(path)).json(); }
 
+const cards = {}; // chargePointId -> { card, refs } persistent DOM elements
+
+function setText(el, value) { if (el.textContent !== value) el.textContent = value; }
+function setPill(el, ok) {
+  const cls = 'pill ' + (ok ? 'ok' : 'no');
+  if (el.className !== cls) el.className = cls;
+}
+
+function createCard(id) {
+  const div = document.createElement('div');
+  div.className = 'card';
+
+  const headRow = document.createElement('div');
+  headRow.className = 'row';
+  const title = document.createElement('b');
+  title.textContent = id;
+  const pills = document.createElement('span');
+  const scPill = document.createElement('span');
+  scPill.className = 'pill no';
+  scPill.textContent = 'SmartCharging';
+  const prPill = document.createElement('span');
+  prPill.className = 'pill no';
+  prPill.textContent = 'Power read';
+  pills.append(scPill, document.createTextNode(' '), prPill);
+  headRow.append(title, pills);
+
+  const meta = document.createElement('div');
+  meta.className = 'muted';
+
+  const connectors = document.createElement('div');
+
+  const settingsRow = document.createElement('div');
+  settingsRow.className = 'row';
+  settingsRow.style.marginTop = '8px';
+  const settingsLabel = document.createElement('span');
+  settingsLabel.className = 'muted';
+  const maxA = document.createElement('input');
+  maxA.style.width = '64px';
+  maxA.type = 'number';
+  maxA.min = '0';
+  const autoLabel = document.createElement('label');
+  const auto = document.createElement('input');
+  auto.type = 'checkbox';
+  autoLabel.append(auto, document.createTextNode(' EMS auto'));
+  settingsLabel.append(document.createTextNode('Max A '), maxA, document.createTextNode(' '), autoLabel);
+  const saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Save';
+  saveBtn.dataset.cp = id;
+  saveBtn.addEventListener('click', () => saveSettings(id));
+  settingsRow.append(settingsLabel, saveBtn);
+
+  const actionRow = document.createElement('div');
+  actionRow.className = 'row';
+  actionRow.style.marginTop = '8px';
+  const startBtn = document.createElement('button');
+  startBtn.className = 'secondary';
+  startBtn.textContent = 'Start';
+  startBtn.dataset.cp = id;
+  startBtn.addEventListener('click', () => startTx(id));
+  const resetBtn = document.createElement('button');
+  resetBtn.className = 'secondary';
+  resetBtn.textContent = 'Reset';
+  resetBtn.dataset.cp = id;
+  resetBtn.addEventListener('click', () => resetCp(id));
+  actionRow.append(startBtn, resetBtn);
+
+  div.append(headRow, meta, connectors, settingsRow, actionRow);
+
+  const entry = { card: div, refs: { scPill, prPill, meta, connectors, maxA, auto } };
+  cards[id] = entry;
+  return entry;
+}
+
+function updateCard(entry, c) {
+  const r = entry.refs;
+  setPill(r.scPill, c.smartChargingSupported);
+  setPill(r.prPill, c.powerReadable);
+  setText(r.meta, `${c.vendor ?? ''} ${c.model ?? ''}`);
+
+  // Rebuild only the connector lines (no input elements live here).
+  r.connectors.innerHTML = '';
+  c.connectors.forEach(x => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const left = document.createElement('span');
+    left.append(document.createTextNode(`Connector ${x.connectorId}: `));
+    const b = document.createElement('b');
+    b.textContent = x.status;
+    left.append(b);
+    const right = document.createElement('span');
+    right.className = 'muted';
+    right.textContent = (x.powerW != null ? x.powerW + ' W' : '—') +
+      (x.transactionId != null ? ' · tx ' + x.transactionId : '');
+    row.append(left, right);
+    r.connectors.append(row);
+  });
+}
+
 function render(state) {
   const cp = $('chargePoints');
-  cp.innerHTML = state.chargePoints.length ? '' : '<div class="muted">No charge points connected.</div>';
+  const present = new Set();
+
   state.chargePoints.forEach(c => {
-    const conn = c.connectors.map(x =>
-      `<div class="row"><span>Connector ${x.connectorId}: <b>${x.status}</b></span>
-       <span class="muted">${x.powerW != null ? x.powerW + ' W' : '—'}${x.transactionId != null ? ' · tx ' + x.transactionId : ''}</span></div>`).join('');
-    const div = document.createElement('div');
-    div.className = 'card';
-    div.innerHTML = `<div class="row"><b>${c.chargePointId}</b>
-      <span><span class="pill ${c.smartChargingSupported?'ok':'no'}">SmartCharging</span>
-      <span class="pill ${c.powerReadable?'ok':'no'}">Power read</span></span></div>
-      <div class="muted">${c.vendor ?? ''} ${c.model ?? ''}</div>${conn}
-      <div class="row" style="margin-top:8px">
-        <span class="muted">Max A <input style="width:64px" id="maxA-${c.chargePointId}" type="number" min="0">
-        <label><input id="auto-${c.chargePointId}" type="checkbox"> EMS auto</label></span>
-        <button onclick="saveSettings('${c.chargePointId}')">Save</button>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <button class="secondary" onclick="startTx('${c.chargePointId}')">Start</button>
-        <button class="secondary" onclick="resetCp('${c.chargePointId}')">Reset</button>
-      </div>`;
-    cp.appendChild(div);
-    loadSettings(c.chargePointId);
+    present.add(c.chargePointId);
+    let entry = cards[c.chargePointId];
+    if (!entry) {
+      entry = createCard(c.chargePointId);
+      cp.appendChild(entry.card);
+      loadSettings(c.chargePointId); // exactly once, at creation
+    }
+    updateCard(entry, c);
   });
+
+  // Remove cards for charge points no longer present.
+  Object.keys(cards).forEach(id => {
+    if (!present.has(id)) {
+      cards[id].card.remove();
+      delete cards[id];
+    }
+  });
+
+  // Empty-state message.
+  let empty = cp.querySelector('.empty-msg');
+  if (state.chargePoints.length === 0) {
+    if (!empty) {
+      empty = document.createElement('div');
+      empty.className = 'muted empty-msg';
+      empty.textContent = 'No charge points connected.';
+      cp.appendChild(empty);
+    }
+  } else if (empty) {
+    empty.remove();
+  }
 }
 
 async function loadSettings(id) {
   const r = await api('/settings/' + id);
-  const maxA = $('maxA-' + id), auto = $('auto-' + id);
-  if (!maxA || !auto) return;
-  if (r.ok) { const s = await r.json(); maxA.value = s.maxCurrentA; auto.checked = s.emsAutoControl; }
-  else { maxA.value = 32; auto.checked = true; } // sensible defaults when none stored yet
+  const entry = cards[id];
+  if (!entry) return;
+  const maxA = entry.refs.maxA, auto = entry.refs.auto;
+  if (r.ok) {
+    const s = await r.json();
+    if (document.activeElement !== maxA) maxA.value = s.maxCurrentA;
+    if (document.activeElement !== auto) auto.checked = s.emsAutoControl;
+  } else { // sensible defaults when none stored yet
+    if (document.activeElement !== maxA) maxA.value = 32;
+    if (document.activeElement !== auto) auto.checked = true;
+  }
 }
 async function saveSettings(id) {
-  const maxCurrentA = parseInt($('maxA-' + id).value, 10) || 0;
-  const emsAutoControl = $('auto-' + id).checked;
+  const entry = cards[id];
+  if (!entry) return;
+  const maxCurrentA = parseInt(entry.refs.maxA.value, 10) || 0;
+  const emsAutoControl = entry.refs.auto.checked;
   await api('/settings/' + id, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({maxCurrentA, emsAutoControl}) });
 }
 

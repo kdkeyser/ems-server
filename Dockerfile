@@ -15,8 +15,11 @@ RUN ./gradlew --no-daemon shadowJar
 FROM eclipse-temurin:21-jre AS runtime
 WORKDIR /app
 
-# Run as a non-root user.
-RUN useradd --system --uid 10001 --create-home ems
+# Run as a non-root user. Pre-create + own /data and /config so that a freshly-created
+# (empty) named volume mounted at /data inherits ems ownership and SQLite can write ems.db.
+RUN useradd --system --uid 10001 --create-home ems \
+    && mkdir -p /data /config \
+    && chown -R ems:ems /data /config
 USER ems
 
 COPY --from=build /app/build/libs/ems-server-all.jar /app/ems-server.jar

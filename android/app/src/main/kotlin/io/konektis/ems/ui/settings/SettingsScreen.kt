@@ -2,6 +2,8 @@ package io.konektis.ems.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,8 +14,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -32,6 +36,8 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
     var serverUrl by rememberSaveable(saved.serverUrl) { mutableStateOf(saved.serverUrl) }
     var username  by rememberSaveable(saved.username)  { mutableStateOf(saved.username) }
     var password  by rememberSaveable(saved.password)  { mutableStateOf(saved.password) }
+    var useTls    by rememberSaveable(saved.useTls)    { mutableStateOf(saved.useTls) }
+    var apiKey    by rememberSaveable(saved.apiKey)    { mutableStateOf(saved.apiKey) }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -50,7 +56,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
                 value = serverUrl,
                 onValueChange = { serverUrl = it },
                 label = { Text("Server address") },
-                placeholder = { Text("10.0.2.2:8080") },
+                placeholder = { Text("ec29.ems.konektis.io or 10.0.2.2:8080") },
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
@@ -66,9 +72,32 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth()
             )
+            OutlinedTextField(
+                value = apiKey,
+                onValueChange = { apiKey = it },
+                label = { Text("API key (remote)") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Use TLS (wss)")
+                Spacer(Modifier.weight(1f))
+                Switch(checked = useTls, onCheckedChange = { useTls = it })
+            }
             Button(
                 onClick = {
-                    vm.save(Settings(serverUrl.trim(), username.trim(), password))
+                    vm.save(
+                        Settings(
+                            serverUrl = serverUrl.trim(),
+                            username = username.trim(),
+                            password = password,
+                            useTls = useTls,
+                            apiKey = apiKey.trim()
+                        )
+                    )
                     onBack()
                 },
                 modifier = Modifier.fillMaxWidth()

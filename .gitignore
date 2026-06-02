@@ -40,3 +40,8 @@ out/
 ### Android / local ###
 local.properties
 *.swp
+
+### Runtime data ###
+# SQLite database created at config.database.path (default: ems.db)
+ems.db
+*.db

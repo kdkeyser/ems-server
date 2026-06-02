@@ -8,6 +8,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
@@ -75,6 +76,9 @@ class OcppService(
     private val sessions = ConcurrentHashMap<String, ChargePointSession>()
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JsonObject>>()
     private val transactionIdCounter = AtomicInteger(1)
+    private val scope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default
+    )
 
     private val _stateFlow = MutableStateFlow(OcppState(emptyList()))
     val stateFlow: StateFlow<OcppState> = _stateFlow.asStateFlow()
@@ -118,6 +122,7 @@ class OcppService(
             powerImportSeen = existing?.powerImportSeen ?: false
         }
         recomputeState()
+        if (status == RegistrationStatus.Accepted && config.autoProbeOnBoot) probeCapabilities(chargePointId)
         return BootNotificationResponse(status, currentTimestamp(), config.heartbeatInterval)
     }
 
@@ -177,7 +182,12 @@ class OcppService(
     suspend fun handleMeterValues(chargePointId: String, request: MeterValuesRequest): MeterValuesResponse {
         val powerW = extractActivePowerW(request)
         if (powerW != null) {
-            sessions[chargePointId]?.connectors?.getOrPut(request.connectorId) { ConnectorState(request.connectorId) }?.lastPowerW = powerW
+            val s = sessions[chargePointId]
+            s?.connectors?.getOrPut(request.connectorId) { ConnectorState(request.connectorId) }?.lastPowerW = powerW
+            if (s != null && !s.powerImportSeen) {
+                s.powerImportSeen = true
+                chargePoints.setCapabilities(chargePointId, smartCharging = s.smartChargingSupported, powerImport = true)
+            }
             recomputeState()
         }
         return MeterValuesResponse()
@@ -203,6 +213,25 @@ class OcppService(
     /** Latest active-power reading (W) for a connector, or null until one arrives. */
     fun latestPowerW(chargePointId: String, connectorId: Int): Int? =
         sessions[chargePointId]?.connectors?.get(connectorId)?.lastPowerW
+
+    /** Update SmartCharging support from a GetConfiguration reply (SupportedFeatureProfiles). */
+    suspend fun applyCapabilityProbe(chargePointId: String, response: GetConfigurationResponse) {
+        val profiles = response.configurationKey
+            ?.firstOrNull { it.key == "SupportedFeatureProfiles" }?.value ?: ""
+        val smartCharging = profiles.contains("SmartCharging", ignoreCase = true)
+        val s = sessions[chargePointId]
+        s?.smartChargingSupported = smartCharging
+        chargePoints.setCapabilities(chargePointId, smartCharging = smartCharging, powerImport = s?.powerImportSeen ?: false)
+        recomputeState()
+    }
+
+    /** Probe SmartCharging support in the background after boot. */
+    fun probeCapabilities(chargePointId: String) {
+        scope.launch {
+            val resp = getConfiguration(chargePointId, listOf("SupportedFeatureProfiles"))
+            if (resp != null) applyCapabilityProbe(chargePointId, resp)
+        }
+    }
 
     private fun recomputeState() {
         _stateFlow.value = OcppState(

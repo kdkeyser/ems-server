@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.runTest
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class SettingsRepositoryTest {
 
@@ -27,15 +28,27 @@ class SettingsRepositoryTest {
         assertEquals(SettingsRepository.DEFAULT_SERVER_URL, s.serverUrl)
         assertEquals(SettingsRepository.DEFAULT_USERNAME, s.username)
         assertEquals(SettingsRepository.DEFAULT_PASSWORD, s.password)
+        assertFalse(s.useTls)            // default off for LAN/dev
+        assertEquals("", s.apiKey)       // no key by default
     }
 
     @Test
     fun `save and load round-trips`() = testScope.runTest {
-        repo.save(Settings("192.168.1.100:8080", "user", "pass"))
+        repo.save(
+            Settings(
+                serverUrl = "ec29.ems.konektis.io",
+                username = "user",
+                password = "pass",
+                useTls = true,
+                apiKey = "secret-key"
+            )
+        )
         val s = repo.settingsFlow.first()
-        assertEquals("192.168.1.100:8080", s.serverUrl)
+        assertEquals("ec29.ems.konektis.io", s.serverUrl)
         assertEquals("user", s.username)
         assertEquals("pass", s.password)
+        assertEquals(true, s.useTls)
+        assertEquals("secret-key", s.apiKey)
     }
 
     @Test

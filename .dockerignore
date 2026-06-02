@@ -1,0 +1,12 @@
+.git
+.gradle
+build/
+android/
+*.db
+.idea
+.vscode
+.claude/
+.superpowers/
+docs/
+local.properties
+*.iml

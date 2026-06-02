@@ -254,6 +254,56 @@ class OcppService(
         pending[uniqueId]?.completeExceptionally(RuntimeException(reason))
     }
 
+    // ---- Outbound command helpers ----
+
+    private fun JsonObject?.isAccepted(): Boolean =
+        this?.get("status")?.jsonPrimitive?.content == "Accepted"
+
+    /** Apply a charging limit to a connector. limit is in the given unit (A or W). Returns true if Accepted. */
+    suspend fun setChargingProfile(chargePointId: String, connectorId: Int, limit: Double, unit: ChargingRateUnitType): Boolean {
+        val profile = ChargingProfile(
+            chargingProfileId = 1,
+            stackLevel = 0,
+            chargingProfilePurpose = ChargingProfilePurposeType.TxDefaultProfile,
+            chargingProfileKind = ChargingProfileKindType.Absolute,
+            chargingSchedule = ChargingSchedule(
+                chargingRateUnit = unit,
+                chargingSchedulePeriod = listOf(ChargingSchedulePeriod(startPeriod = 0, limit = limit)),
+            ),
+        )
+        val payload = json.encodeToJsonElement(SetChargingProfileRequest(connectorId, profile)).jsonObject
+        return sendCall(chargePointId, Action.SetChargingProfile, payload).isAccepted()
+    }
+
+    suspend fun getConfiguration(chargePointId: String, keys: List<String>? = null): GetConfigurationResponse? {
+        val payload = json.encodeToJsonElement(GetConfigurationRequest(keys)).jsonObject
+        val reply = sendCall(chargePointId, Action.GetConfiguration, payload) ?: return null
+        return runCatching { json.decodeFromJsonElement<GetConfigurationResponse>(reply) }.getOrNull()
+    }
+
+    suspend fun remoteStart(chargePointId: String, idTag: String, connectorId: Int? = null): Boolean {
+        val payload = json.encodeToJsonElement(RemoteStartTransactionRequest(idTag = idTag, connectorId = connectorId)).jsonObject
+        return sendCall(chargePointId, Action.RemoteStartTransaction, payload).isAccepted()
+    }
+
+    suspend fun remoteStop(chargePointId: String, transactionId: Int): Boolean {
+        val payload = json.encodeToJsonElement(RemoteStopTransactionRequest(transactionId)).jsonObject
+        return sendCall(chargePointId, Action.RemoteStopTransaction, payload).isAccepted()
+    }
+
+    suspend fun reset(chargePointId: String, type: ResetType): Boolean {
+        val payload = json.encodeToJsonElement(ResetRequest(type)).jsonObject
+        return sendCall(chargePointId, Action.Reset, payload).isAccepted()
+    }
+
+    suspend fun triggerMessage(chargePointId: String, requestedMessage: String, connectorId: Int? = null): Boolean {
+        val payload = buildJsonObject {
+            put("requestedMessage", requestedMessage)
+            if (connectorId != null) put("connectorId", connectorId)
+        }
+        return sendCall(chargePointId, Action.TriggerMessage, payload).isAccepted()
+    }
+
     private fun currentTimestamp(): String =
         Instant.now().atOffset(ZoneOffset.UTC).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
 }

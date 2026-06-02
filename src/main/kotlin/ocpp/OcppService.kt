@@ -4,16 +4,20 @@ import io.klogging.Klogging
 import io.konektis.config.OcppConfig
 import io.konektis.ocpp.db.*
 import io.ktor.websocket.*
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.Duration.Companion.seconds
 
 // ---- Live (in-memory) state ----
 
@@ -69,6 +73,7 @@ class OcppService(
 ) : Klogging {
 
     private val sessions = ConcurrentHashMap<String, ChargePointSession>()
+    private val pending = ConcurrentHashMap<String, CompletableDeferred<JsonObject>>()
     private val transactionIdCounter = AtomicInteger(1)
 
     private val _stateFlow = MutableStateFlow(OcppState(emptyList()))
@@ -217,9 +222,37 @@ class OcppService(
         )
     }
 
-    // Replaced with real correlation in Task 4.
-    fun completeCall(uniqueId: String, payload: JsonObject) {}
-    fun failCall(uniqueId: String, reason: String) {}
+    /** Send a CALL to a charge point and await its CALL_RESULT payload, or null on timeout/error/unknown. */
+    suspend fun sendCall(chargePointId: String, action: Action, payload: JsonObject): JsonObject? {
+        val session = sessions[chargePointId] ?: run {
+            logger.warn("sendCall: no session for {cp}", chargePointId); return null
+        }
+        val uniqueId = UUID.randomUUID().toString()
+        val deferred = CompletableDeferred<JsonObject>()
+        pending[uniqueId] = deferred
+        val frame = buildJsonArray {
+            add(MessageType.CALL.value); add(uniqueId); add(action.name); add(payload)
+        }.toString()
+        return try {
+            session.session.send(Frame.Text(frame))
+            logger.info("Sent {action} to {cp}", action.name, chargePointId)
+            withTimeoutOrNull(config.callTimeoutSeconds.seconds) { deferred.await() }
+                ?: run { logger.warn("{action} to {cp} timed out", action.name, chargePointId); null }
+        } catch (e: Exception) {
+            logger.error("sendCall {action} to {cp} failed: {err}", action.name, chargePointId, e.message)
+            null
+        } finally {
+            pending.remove(uniqueId)
+        }
+    }
+
+    fun completeCall(uniqueId: String, payload: JsonObject) {
+        pending[uniqueId]?.complete(payload)
+    }
+
+    fun failCall(uniqueId: String, reason: String) {
+        pending[uniqueId]?.completeExceptionally(RuntimeException(reason))
+    }
 
     private fun currentTimestamp(): String =
         Instant.now().atOffset(ZoneOffset.UTC).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)

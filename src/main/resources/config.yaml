@@ -38,4 +38,11 @@ devices:
     - type: SMA_Sunny_Boy_Storage
       name: Home Battery
       host: 192.168.129.18
-
+  charger:
+    - type: OCPP
+      name: Garage
+      chargePointId: CP01
+      chargingCurrent:
+        min: 6.0
+        max: 32.0
+  

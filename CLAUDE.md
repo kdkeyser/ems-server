@@ -19,7 +19,7 @@ src/main/kotlin/
 │   ├── Devices.kt          # Shared types: Watt, Volt, Ampere, DeviceUpdate<T>
 │   ├── World.kt            # Holds all live device instances; built from Config
 │   ├── battery/            # Battery interface + SMABattery (Modbus TCP)
-│   ├── charger/            # Charger interface + Webasto (Modbus TCP, needs keepalive)
+│   ├── charger/            # Charger interface + Webasto (Modbus TCP) + OcppCharger (OCPP 1.6J)
 │   ├── grid/               # Grid interface + P1Meter (HTTP JSON, HomeWizard)
 │   ├── smartConsumer/      # SmartConsumer interface + DaikinHeatpump (Modbus TCP)
 │   └── solar/              # Solar interface + SMASolar (Modbus TCP)
@@ -33,9 +33,14 @@ src/main/kotlin/
 │   └── SurplusPriorityStrategy.kt  # Default: heat pump → charger → battery
 └── ocpp/
     ├── OcppMessages.kt     # OCPP 1.6J message types (serialisable data classes)
-    ├── OcppServer.kt       # WebSocket /ocpp/{chargePointId} endpoint
-    └── OcppSessionManager.kt  # OCPP session lifecycle + message dispatch
+    ├── OcppServer.kt       # WebSocket /ocpp/{chargePointId} endpoint (subprotocol ocpp1.6)
+    ├── OcppService.kt      # DI singleton: live session state (StateFlow), inbound handlers,
+    │                       #   request/response correlation, outbound commands, capability detection
+    ├── OcppWebUi.kt        # /ocpp-ui config + status web page, live WS, REST API
+    └── db/                 # SQLite (Exposed): charge-point allow-list, idTags, settings, transactions
 ```
+
+See [docs/adding-an-ocpp-charger.md](docs/adding-an-ocpp-charger.md) for how to configure and connect an OCPP charger.
 
 ## Device Communication Protocols
 
@@ -46,6 +51,7 @@ src/main/kotlin/
 | SMA Battery (Sunny Boy Storage) | Modbus TCP port 502, unit 3 | 30845=SoC%; 31393=charging W; 31395=discharging W; 40149=target power S32 (**inverted sign**: +=discharge, −=charge); 40151=control enable (802=on, 803=off) |
 | Webasto Unite | Modbus TCP port 502, unit 1 | 1020=current power W; 5004=max current A; 6000=keepalive (write 1 every <30s) |
 | Daikin HomeHub | Modbus TCP port 502, unit 1 | 50=power W; 55=SG-Ready mode; 56=max power suggestion |
+| OCPP charger | WebSocket /ocpp/{id}, subprotocol ocpp1.6 | Charger dials in; power from MeterValues `Power.Active.Import`; throttle via SetChargingProfile (needs SmartCharging profile). See [docs/adding-an-ocpp-charger.md](docs/adding-an-ocpp-charger.md) |
 
 ## Power Sign Convention
 

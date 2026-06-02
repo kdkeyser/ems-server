@@ -221,6 +221,14 @@ class OcppService(
 
     suspend fun getChargerSettings(id: String): ChargerSettingsRecord? = settings.get(id)
 
+    suspend fun listChargePoints() = chargePoints.all()
+    suspend fun setChargePointAccepted(id: String, accepted: Boolean) = chargePoints.setAccepted(id, accepted)
+    suspend fun listIdTags() = idTags.all()
+    suspend fun putIdTag(idTag: String, status: String) = idTags.put(idTag, status)
+    suspend fun deleteIdTag(idTag: String) = idTags.delete(idTag)
+    suspend fun putChargerSettings(id: String, maxCurrentA: Int, emsAutoControl: Boolean) =
+        settings.put(id, maxCurrentA, emsAutoControl)
+
     /** Update SmartCharging support from a GetConfiguration reply (SupportedFeatureProfiles). */
     suspend fun applyCapabilityProbe(chargePointId: String, response: GetConfigurationResponse) {
         val profiles = response.configurationKey

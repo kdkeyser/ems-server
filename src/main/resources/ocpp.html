@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OCPP Control</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #111827; color: #e5e7eb; padding: 20px; max-width: 860px; margin: 0 auto; }
+    h1 { color: #93c5fd; font-size: 1.2rem; margin-bottom: 16px; }
+    h2 { color: #93c5fd; font-size: 1rem; margin: 20px 0 8px; }
+    .card { background: #1f2937; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+    .row { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .muted { color: #9ca3af; font-size: 0.8rem; }
+    .pill { font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; background: #374151; }
+    .pill.ok { background: #065f46; color: #d1fae5; }
+    .pill.no { background: #7c2d12; color: #fed7aa; }
+    button { background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 0.8rem; }
+    button.secondary { background: #374151; }
+    input { background: #111827; border: 1px solid #374151; color: #e5e7eb; border-radius: 6px; padding: 5px 8px; font-size: 0.8rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #374151; }
+    .reconnecting { background: #7c2d12; color: #fed7aa; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; display: none; }
+  </style>
+</head>
+<body>
+  <h1>OCPP Charger Control</h1>
+  <div class="reconnecting" id="reconnecting">Reconnecting…</div>
+
+  <h2>Connected charge points</h2>
+  <div id="chargePoints"></div>
+
+  <h2>Allow-list</h2>
+  <div id="allowList"></div>
+
+  <h2>Authorized idTags</h2>
+  <div class="card">
+    <div class="row">
+      <input id="newTag" placeholder="idTag">
+      <button onclick="addTag()">Add (Accepted)</button>
+    </div>
+    <div id="idTags" style="margin-top:8px"></div>
+  </div>
+
+  <h2>Recent sessions</h2>
+  <div class="card"><table id="transactions"><tbody></tbody></table></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(path, opts) {
+  const r = await fetch('/ocpp-ui/api' + path, opts);
+  return r;
+}
+async function getJson(path) { return (await api(path)).json(); }
+
+function render(state) {
+  const cp = $('chargePoints');
+  cp.innerHTML = state.chargePoints.length ? '' : '<div class="muted">No charge points connected.</div>';
+  state.chargePoints.forEach(c => {
+    const conn = c.connectors.map(x =>
+      `<div class="row"><span>Connector ${x.connectorId}: <b>${x.status}</b></span>
+       <span class="muted">${x.powerW != null ? x.powerW + ' W' : '—'}${x.transactionId != null ? ' · tx ' + x.transactionId : ''}</span></div>`).join('');
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = `<div class="row"><b>${c.chargePointId}</b>
+      <span><span class="pill ${c.smartChargingSupported?'ok':'no'}">SmartCharging</span>
+      <span class="pill ${c.powerReadable?'ok':'no'}">Power read</span></span></div>
+      <div class="muted">${c.vendor ?? ''} ${c.model ?? ''}</div>${conn}
+      <div class="row" style="margin-top:8px">
+        <span class="muted">Max A <input style="width:64px" id="maxA-${c.chargePointId}" type="number" min="0">
+        <label><input id="auto-${c.chargePointId}" type="checkbox"> EMS auto</label></span>
+        <button onclick="saveSettings('${c.chargePointId}')">Save</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="secondary" onclick="startTx('${c.chargePointId}')">Start</button>
+        <button class="secondary" onclick="resetCp('${c.chargePointId}')">Reset</button>
+      </div>`;
+    cp.appendChild(div);
+    loadSettings(c.chargePointId);
+  });
+}
+
+async function loadSettings(id) {
+  const r = await api('/settings/' + id);
+  const maxA = $('maxA-' + id), auto = $('auto-' + id);
+  if (!maxA || !auto) return;
+  if (r.ok) { const s = await r.json(); maxA.value = s.maxCurrentA; auto.checked = s.emsAutoControl; }
+  else { maxA.value = 32; auto.checked = true; } // sensible defaults when none stored yet
+}
+async function saveSettings(id) {
+  const maxCurrentA = parseInt($('maxA-' + id).value, 10) || 0;
+  const emsAutoControl = $('auto-' + id).checked;
+  await api('/settings/' + id, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({maxCurrentA, emsAutoControl}) });
+}
+
+async function refreshAllowList() {
+  const list = await getJson('/chargepoints');
+  const el = $('allowList');
+  el.innerHTML = list.length ? '' : '<div class="muted">None known yet.</div>';
+  list.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = `<div class="row"><span>${c.chargePointId} <span class="muted">${c.vendor ?? ''} ${c.model ?? ''}</span></span>
+      <button onclick="setAccepted('${c.chargePointId}', ${!c.accepted})">${c.accepted ? 'Revoke' : 'Accept'}</button></div>`;
+    el.appendChild(div);
+  });
+}
+
+async function refreshTags() {
+  const tags = await getJson('/idtags');
+  const el = $('idTags');
+  el.innerHTML = tags.length ? '' : '<div class="muted">No idTags.</div>';
+  tags.forEach(t => {
+    const div = document.createElement('div');
+    div.className = 'row';
+    div.innerHTML = `<span>${t.idTag} <span class="muted">(${t.status})</span></span>
+      <button class="secondary" onclick="delTag('${t.idTag}')">Delete</button>`;
+    el.appendChild(div);
+  });
+}
+
+async function refreshTransactions() {
+  const txs = await getJson('/transactions');
+  const body = $('transactions').querySelector('tbody');
+  body.innerHTML = '<tr><th>tx</th><th>cp</th><th>idTag</th><th>Wh</th></tr>' +
+    txs.map(t => `<tr><td>${t.transactionId}</td><td>${t.chargePointId}</td><td>${t.idTag ?? ''}</td>
+      <td>${t.meterStop != null ? (t.meterStop - t.meterStart) : '—'}</td></tr>`).join('');
+}
+
+async function setAccepted(id, accepted) {
+  await api('/chargepoints/' + id + '/accepted', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({accepted}) });
+  refreshAllowList();
+}
+async function addTag() {
+  const idTag = $('newTag').value.trim(); if (!idTag) return;
+  await api('/idtags', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({idTag, status:'Accepted'}) });
+  $('newTag').value=''; refreshTags();
+}
+async function delTag(idTag) { await api('/idtags/' + encodeURIComponent(idTag), { method:'DELETE' }); refreshTags(); }
+async function startTx(id) {
+  const idTag = prompt('idTag to start with?'); if (!idTag) return;
+  await api('/chargepoints/' + id + '/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({idTag}) });
+}
+async function resetCp(id) {
+  await api('/chargepoints/' + id + '/reset', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type:'Soft'}) });
+}
+
+function connect() {
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ocpp-ui/ws');
+  ws.onmessage = (e) => { render(JSON.parse(e.data)); $('reconnecting').style.display='none'; };
+  ws.onopen = () => { $('reconnecting').style.display='none'; refreshAllowList(); refreshTags(); refreshTransactions(); };
+  ws.onclose = () => { $('reconnecting').style.display='block'; setTimeout(connect, 2000); };
+}
+connect();
+setInterval(() => { refreshAllowList(); refreshTags(); refreshTransactions(); }, 10000);
+</script>
+</body>
+</html>

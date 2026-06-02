@@ -11,7 +11,10 @@ import io.konektis.di.AppComponent
 import io.konektis.di.create
 import io.konektis.ems.EnergyManager
 import io.ktor.server.application.*
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.serialization.kotlinx.json.json
 import io.konektis.ocpp.configureOcppServer
+import io.konektis.ocpp.configureOcppWebUi
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import kotlinx.coroutines.coroutineScope
@@ -91,11 +94,13 @@ class Main : Klogging {
 }
 
 fun Application.module(energyManager: EnergyManager, wsConfig: WebSocketConfig, statusFlow: Flow<StatusState?>, ocppService: io.konektis.ocpp.OcppService, database: Database) {
+    install(ContentNegotiation) { json() }
     configureSecurity()
     configureAdministration()
     configureSockets(energyManager, wsConfig)
     configureStatusPage(statusFlow)
     configureOcppServer(ocppService)
+    configureOcppWebUi(ocppService)
     configureDatabases(database)
     configureMonitoring()
     configureHTTP()

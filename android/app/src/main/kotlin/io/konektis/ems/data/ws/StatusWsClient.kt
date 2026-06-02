@@ -5,6 +5,8 @@ import io.konektis.ems.data.model.StatusState
 import io.konektis.ems.data.settings.SettingsRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.client.request.header
+import io.ktor.http.HttpHeaders
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CancellationException
@@ -34,7 +36,14 @@ class StatusWsClient(
         while (currentCoroutineContext().isActive) {
             _connectionState.value = ConnectionState.Connecting
             try {
-                client.webSocket("ws://${s.serverUrl}/status-ws") {
+                client.webSocket(
+                    urlString = wsUrl(s.serverUrl, s.useTls, "/status-ws"),
+                    request = {
+                        if (s.apiKey.isNotBlank()) {
+                            header(HttpHeaders.Authorization, "Bearer ${s.apiKey}")
+                        }
+                    }
+                ) {
                     attempt = 0
                     _connectionState.value = ConnectionState.Connected
                     for (frame in incoming) {

@@ -66,11 +66,13 @@ class ChargePointStore(private val db: Database) {
         Unit
     }
 
-    suspend fun setCapabilities(id: String, smartCharging: Boolean, powerImport: Boolean) = dbQuery(db) {
-        OcppChargePoints.update({ OcppChargePoints.chargePointId eq id }) {
-            it[smartChargingSupported] = smartCharging
-            it[powerImportSeen] = powerImport
-        }
+    suspend fun setSmartChargingSupported(id: String, value: Boolean) = dbQuery(db) {
+        OcppChargePoints.update({ OcppChargePoints.chargePointId eq id }) { it[smartChargingSupported] = value }
+        Unit
+    }
+
+    suspend fun setPowerImportSeen(id: String, value: Boolean) = dbQuery(db) {
+        OcppChargePoints.update({ OcppChargePoints.chargePointId eq id }) { it[powerImportSeen] = value }
         Unit
     }
 }

@@ -5,6 +5,9 @@ import io.konektis.config.OcppConfig
 import io.konektis.ocpp.db.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -76,9 +79,7 @@ class OcppService(
     private val sessions = ConcurrentHashMap<String, ChargePointSession>()
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JsonObject>>()
     private val transactionIdCounter = AtomicInteger(1)
-    private val scope = kotlinx.coroutines.CoroutineScope(
-        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default
-    )
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val _stateFlow = MutableStateFlow(OcppState(emptyList()))
     val stateFlow: StateFlow<OcppState> = _stateFlow.asStateFlow()
@@ -186,7 +187,7 @@ class OcppService(
             s?.connectors?.getOrPut(request.connectorId) { ConnectorState(request.connectorId) }?.lastPowerW = powerW
             if (s != null && !s.powerImportSeen) {
                 s.powerImportSeen = true
-                chargePoints.setCapabilities(chargePointId, smartCharging = s.smartChargingSupported, powerImport = true)
+                chargePoints.setPowerImportSeen(chargePointId, true)
             }
             recomputeState()
         }
@@ -221,7 +222,7 @@ class OcppService(
         val smartCharging = profiles.contains("SmartCharging", ignoreCase = true)
         val s = sessions[chargePointId]
         s?.smartChargingSupported = smartCharging
-        chargePoints.setCapabilities(chargePointId, smartCharging = smartCharging, powerImport = s?.powerImportSeen ?: false)
+        chargePoints.setSmartChargingSupported(chargePointId, smartCharging)
         recomputeState()
     }
 

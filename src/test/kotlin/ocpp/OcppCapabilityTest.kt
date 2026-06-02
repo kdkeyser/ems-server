@@ -50,4 +50,19 @@ class OcppCapabilityTest {
         assertTrue(store.get("CP1")!!.smartChargingSupported)
         assertTrue(svc.stateFlow.value.chargePoints.single().smartChargingSupported)
     }
+
+    @Test
+    fun smartChargingFalseWhenProfileAbsentOrNull() = runTest {
+        val (svc, store) = newService()
+        svc.registerSession("CP1", mockk(relaxed = true))
+        svc.handleBootNotification("CP1", BootNotificationRequest("Acme", "X1"))
+        // A GetConfiguration reply that does NOT advertise SmartCharging
+        svc.applyCapabilityProbe("CP1", GetConfigurationResponse(
+            configurationKey = listOf(ConfigurationKey("SupportedFeatureProfiles", true, "Core,FirmwareManagement")),
+        ))
+        assertFalse(store.get("CP1")!!.smartChargingSupported)
+        // And a reply with no configurationKey at all stays false
+        svc.applyCapabilityProbe("CP1", GetConfigurationResponse(configurationKey = null))
+        assertFalse(store.get("CP1")!!.smartChargingSupported)
+    }
 }

@@ -21,7 +21,8 @@ class OcppStoresTest {
         store.setAccepted("CP01", true)
         assertTrue(store.get("CP01")!!.accepted)
 
-        store.setCapabilities("CP01", smartCharging = true, powerImport = true)
+        store.setSmartChargingSupported("CP01", true)
+        store.setPowerImportSeen("CP01", true)
         val updated = store.get("CP01")!!
         assertTrue(updated.smartChargingSupported)
         assertTrue(updated.powerImportSeen)

@@ -7,6 +7,8 @@ import io.konektis.ems.data.model.Message
 import io.konektis.ems.data.settings.SettingsRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.client.request.header
+import io.ktor.http.HttpHeaders
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CancellationException
@@ -50,7 +52,14 @@ class ControlWsClient(
                 while (currentCoroutineContext().isActive) {
                     _connectionState.value = ControlState.Connecting
                     try {
-                        client.webSocket("ws://${s.serverUrl}/ws") {
+                        client.webSocket(
+                            urlString = wsUrl(s.serverUrl, s.useTls, "/ws"),
+                            request = {
+                                if (s.apiKey.isNotBlank()) {
+                                    header(HttpHeaders.Authorization, "Bearer ${s.apiKey}")
+                                }
+                            }
+                        ) {
                             attempt = 0
                             outgoing.send(Frame.Text(
                                 Json.encodeToString<ClientMessage>(

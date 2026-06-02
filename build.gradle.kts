@@ -36,6 +36,7 @@ dependencies {
     implementation(libs.exposed.core)
     implementation(libs.exposed.jdbc)
     implementation(libs.h2)
+    implementation(libs.sqlite.jdbc)
     implementation(libs.ktor.server.call.logging)
     implementation(libs.ktor.server.sessions)
     implementation(libs.ktor.server.default.headers)
@@ -55,7 +56,7 @@ dependencies {
     implementation(libs.klogging.sl4j)
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
-    testImplementation("io.mockk:mockk:1.13.8")
+    testImplementation("io.mockk:mockk:1.13.16")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
     testImplementation(libs.ktor.client.websockets)
     implementation(libs.kotlin.inject.runtime)
@@ -64,4 +65,9 @@ dependencies {
 
 configurations.all {
     exclude("ch.qos.logback")
+}
+
+tasks.withType<Test> {
+    // MockK/ByteBuddy must self-attach to instrument final classes on JDK 21+; allow it explicitly.
+    jvmArgs("-XX:+EnableDynamicAgentLoading", "-Dnet.bytebuddy.experimental=true")
 }

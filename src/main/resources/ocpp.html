@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OCPP Control</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #111827; color: #e5e7eb; padding: 20px; max-width: 860px; margin: 0 auto; }
+    h1 { color: #93c5fd; font-size: 1.2rem; margin-bottom: 16px; }
+    h2 { color: #93c5fd; font-size: 1rem; margin: 20px 0 8px; }
+    .card { background: #1f2937; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+    .row { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .muted { color: #9ca3af; font-size: 0.8rem; }
+    .pill { font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; background: #374151; }
+    .pill.ok { background: #065f46; color: #d1fae5; }
+    .pill.no { background: #7c2d12; color: #fed7aa; }
+    button { background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 0.8rem; }
+    button.secondary { background: #374151; }
+    input { background: #111827; border: 1px solid #374151; color: #e5e7eb; border-radius: 6px; padding: 5px 8px; font-size: 0.8rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #374151; }
+    .reconnecting { background: #7c2d12; color: #fed7aa; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; display: none; }
+  </style>
+</head>
+<body>
+  <h1>OCPP Charger Control</h1>
+  <div class="reconnecting" id="reconnecting">Reconnecting…</div>
+
+  <h2>Connected charge points</h2>
+  <div id="chargePoints"></div>
+
+  <h2>Allow-list</h2>
+  <div id="allowList"></div>
+
+  <h2>Authorized idTags</h2>
+  <div class="card">
+    <div class="row">
+      <input id="newTag" placeholder="idTag">
+      <button onclick="addTag()">Add (Accepted)</button>
+    </div>
+    <div id="idTags" style="margin-top:8px"></div>
+  </div>
+
+  <h2>Recent sessions</h2>
+  <div class="card"><table id="transactions"><tbody></tbody></table></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(path, opts) {
+  const r = await fetch('/ocpp-ui/api' + path, opts);
+  return r;
+}
+async function getJson(path) { return (await api(path)).json(); }
+
+const cards = {}; // chargePointId -> { card, refs } persistent DOM elements
+
+function setText(el, value) { if (el.textContent !== value) el.textContent = value; }
+function setPill(el, ok) {
+  const cls = 'pill ' + (ok ? 'ok' : 'no');
+  if (el.className !== cls) el.className = cls;
+}
+
+function createCard(id) {
+  const div = document.createElement('div');
+  div.className = 'card';
+
+  const headRow = document.createElement('div');
+  headRow.className = 'row';
+  const title = document.createElement('b');
+  title.textContent = id;
+  const pills = document.createElement('span');
+  const scPill = document.createElement('span');
+  scPill.className = 'pill no';
+  scPill.textContent = 'SmartCharging';
+  const prPill = document.createElement('span');
+  prPill.className = 'pill no';
+  prPill.textContent = 'Power read';
+  pills.append(scPill, document.createTextNode(' '), prPill);
+  headRow.append(title, pills);
+
+  const meta = document.createElement('div');
+  meta.className = 'muted';
+
+  const connectors = document.createElement('div');
+
+  const settingsRow = document.createElement('div');
+  settingsRow.className = 'row';
+  settingsRow.style.marginTop = '8px';
+  const settingsLabel = document.createElement('span');
+  settingsLabel.className = 'muted';
+  const maxA = document.createElement('input');
+  maxA.style.width = '64px';
+  maxA.type = 'number';
+  maxA.min = '0';
+  const autoLabel = document.createElement('label');
+  const auto = document.createElement('input');
+  auto.type = 'checkbox';
+  autoLabel.append(auto, document.createTextNode(' EMS auto'));
+  settingsLabel.append(document.createTextNode('Max A '), maxA, document.createTextNode(' '), autoLabel);
+  const saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Save';
+  saveBtn.dataset.cp = id;
+  saveBtn.addEventListener('click', () => saveSettings(id));
+  settingsRow.append(settingsLabel, saveBtn);
+
+  const actionRow = document.createElement('div');
+  actionRow.className = 'row';
+  actionRow.style.marginTop = '8px';
+  const startBtn = document.createElement('button');
+  startBtn.className = 'secondary';
+  startBtn.textContent = 'Start';
+  startBtn.dataset.cp = id;
+  startBtn.addEventListener('click', () => startTx(id));
+  const resetBtn = document.createElement('button');
+  resetBtn.className = 'secondary';
+  resetBtn.textContent = 'Reset';
+  resetBtn.dataset.cp = id;
+  resetBtn.addEventListener('click', () => resetCp(id));
+  actionRow.append(startBtn, resetBtn);
+
+  div.append(headRow, meta, connectors, settingsRow, actionRow);
+
+  const entry = { card: div, refs: { scPill, prPill, meta, connectors, maxA, auto } };
+  cards[id] = entry;
+  return entry;
+}
+
+function updateCard(entry, c) {
+  const r = entry.refs;
+  setPill(r.scPill, c.smartChargingSupported);
+  setPill(r.prPill, c.powerReadable);
+  setText(r.meta, `${c.vendor ?? ''} ${c.model ?? ''}`);
+
+  // Rebuild only the connector lines (no input elements live here).
+  r.connectors.innerHTML = '';
+  c.connectors.forEach(x => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const left = document.createElement('span');
+    left.append(document.createTextNode(`Connector ${x.connectorId}: `));
+    const b = document.createElement('b');
+    b.textContent = x.status;
+    left.append(b);
+    const right = document.createElement('span');
+    right.className = 'muted';
+    right.textContent = (x.powerW != null ? x.powerW + ' W' : '—') +
+      (x.transactionId != null ? ' · tx ' + x.transactionId : '');
+    row.append(left, right);
+    r.connectors.append(row);
+  });
+}
+
+function render(state) {
+  const cp = $('chargePoints');
+  const present = new Set();
+
+  state.chargePoints.forEach(c => {
+    present.add(c.chargePointId);
+    let entry = cards[c.chargePointId];
+    if (!entry) {
+      entry = createCard(c.chargePointId);
+      cp.appendChild(entry.card);
+      loadSettings(c.chargePointId); // exactly once, at creation
+    }
+    updateCard(entry, c);
+  });
+
+  // Remove cards for charge points no longer present.
+  Object.keys(cards).forEach(id => {
+    if (!present.has(id)) {
+      cards[id].card.remove();
+      delete cards[id];
+    }
+  });
+
+  // Empty-state message.
+  let empty = cp.querySelector('.empty-msg');
+  if (state.chargePoints.length === 0) {
+    if (!empty) {
+      empty = document.createElement('div');
+      empty.className = 'muted empty-msg';
+      empty.textContent = 'No charge points connected.';
+      cp.appendChild(empty);
+    }
+  } else if (empty) {
+    empty.remove();
+  }
+}
+
+async function loadSettings(id) {
+  const r = await api('/settings/' + id);
+  const entry = cards[id];
+  if (!entry) return;
+  const maxA = entry.refs.maxA, auto = entry.refs.auto;
+  if (r.ok) {
+    const s = await r.json();
+    if (document.activeElement !== maxA) maxA.value = s.maxCurrentA;
+    if (document.activeElement !== auto) auto.checked = s.emsAutoControl;
+  } else { // sensible defaults when none stored yet
+    if (document.activeElement !== maxA) maxA.value = 32;
+    if (document.activeElement !== auto) auto.checked = true;
+  }
+}
+async function saveSettings(id) {
+  const entry = cards[id];
+  if (!entry) return;
+  const maxCurrentA = parseInt(entry.refs.maxA.value, 10) || 0;
+  const emsAutoControl = entry.refs.auto.checked;
+  await api('/settings/' + id, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({maxCurrentA, emsAutoControl}) });
+}
+
+async function refreshAllowList() {
+  const list = await getJson('/chargepoints');
+  const el = $('allowList');
+  el.innerHTML = list.length ? '' : '<div class="muted">None known yet.</div>';
+  list.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = `<div class="row"><span>${c.chargePointId} <span class="muted">${c.vendor ?? ''} ${c.model ?? ''}</span></span>
+      <button onclick="setAccepted('${c.chargePointId}', ${!c.accepted})">${c.accepted ? 'Revoke' : 'Accept'}</button></div>`;
+    el.appendChild(div);
+  });
+}
+
+async function refreshTags() {
+  const tags = await getJson('/idtags');
+  const el = $('idTags');
+  el.innerHTML = tags.length ? '' : '<div class="muted">No idTags.</div>';
+  tags.forEach(t => {
+    const div = document.createElement('div');
+    div.className = 'row';
+    div.innerHTML = `<span>${t.idTag} <span class="muted">(${t.status})</span></span>
+      <button class="secondary" onclick="delTag('${t.idTag}')">Delete</button>`;
+    el.appendChild(div);
+  });
+}
+
+async function refreshTransactions() {
+  const txs = await getJson('/transactions');
+  const body = $('transactions').querySelector('tbody');
+  body.innerHTML = '<tr><th>tx</th><th>cp</th><th>idTag</th><th>Wh</th></tr>' +
+    txs.map(t => `<tr><td>${t.transactionId}</td><td>${t.chargePointId}</td><td>${t.idTag ?? ''}</td>
+      <td>${t.meterStop != null ? (t.meterStop - t.meterStart) : '—'}</td></tr>`).join('');
+}
+
+async function setAccepted(id, accepted) {
+  await api('/chargepoints/' + id + '/accepted', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({accepted}) });
+  refreshAllowList();
+}
+async function addTag() {
+  const idTag = $('newTag').value.trim(); if (!idTag) return;
+  await api('/idtags', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({idTag, status:'Accepted'}) });
+  $('newTag').value=''; refreshTags();
+}
+async function delTag(idTag) { await api('/idtags/' + encodeURIComponent(idTag), { method:'DELETE' }); refreshTags(); }
+async function startTx(id) {
+  const idTag = prompt('idTag to start with?'); if (!idTag) return;
+  await api('/chargepoints/' + id + '/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({idTag}) });
+}
+async function resetCp(id) {
+  await api('/chargepoints/' + id + '/reset', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type:'Soft'}) });
+}
+
+function connect() {
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ocpp-ui/ws');
+  ws.onmessage = (e) => { render(JSON.parse(e.data)); $('reconnecting').style.display='none'; };
+  ws.onopen = () => { $('reconnecting').style.display='none'; refreshAllowList(); refreshTags(); refreshTransactions(); };
+  ws.onclose = () => { $('reconnecting').style.display='block'; setTimeout(connect, 2000); };
+}
+connect();
+setInterval(() => { refreshAllowList(); refreshTags(); refreshTransactions(); }, 10000);
+</script>
+</body>
+</html>

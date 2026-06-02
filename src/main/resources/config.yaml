@@ -3,6 +3,9 @@ ocpp:
   heartbeatInterval: 300
   connectionTimeout: 60
 
+database:
+  path: ems.db
+
 websocket:
   username: user
   password: password

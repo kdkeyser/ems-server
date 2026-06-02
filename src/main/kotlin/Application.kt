@@ -11,7 +11,10 @@ import io.konektis.di.AppComponent
 import io.konektis.di.create
 import io.konektis.ems.EnergyManager
 import io.ktor.server.application.*
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.serialization.kotlinx.json.json
 import io.konektis.ocpp.configureOcppServer
+import io.konektis.ocpp.configureOcppWebUi
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import kotlinx.coroutines.coroutineScope
@@ -20,6 +23,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import org.jetbrains.exposed.sql.Database
 
 suspend fun main(args: Array<String>) {
     Main().main(args)
@@ -80,7 +84,7 @@ class Main : Klogging {
             launch { energyManager.run() }
             launch {
                 val server = embeddedServer(Netty, port = 8080) {
-                    module(energyManager, config.websocket, dataCollector.statusStateFlow)
+                    module(energyManager, config.websocket, dataCollector.statusStateFlow, component.ocppService, component.database)
                 }
                 server.start(wait = true)
             }
@@ -89,13 +93,15 @@ class Main : Klogging {
     }
 }
 
-fun Application.module(energyManager: EnergyManager, wsConfig: WebSocketConfig, statusFlow: Flow<StatusState?>) {
+fun Application.module(energyManager: EnergyManager, wsConfig: WebSocketConfig, statusFlow: Flow<StatusState?>, ocppService: io.konektis.ocpp.OcppService, database: Database) {
+    install(ContentNegotiation) { json() }
     configureSecurity()
     configureAdministration()
     configureSockets(energyManager, wsConfig)
     configureStatusPage(statusFlow)
-    configureOcppServer()
-    configureDatabases()
+    configureOcppServer(ocppService)
+    configureOcppWebUi(ocppService)
+    configureDatabases(database)
     configureMonitoring()
     configureHTTP()
     configureRouting()

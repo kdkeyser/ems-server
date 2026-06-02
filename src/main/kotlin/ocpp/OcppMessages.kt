@@ -1,5 +1,6 @@
 package io.konektis.ocpp
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 
@@ -299,15 +300,16 @@ data class SampledValue(
     val unit: UnitOfMeasure? = null
 )
 
+@Serializable
 enum class ReadingContext {
-    `Interruption.Begin`,
-    `Interruption.End`,
-    `Sample.Clock`,
-    `Sample.Periodic`,
-    `Transaction.Begin`,
-    `Transaction.End`,
+    @SerialName("Interruption.Begin") InterruptionBegin,
+    @SerialName("Interruption.End") InterruptionEnd,
+    @SerialName("Sample.Clock") SampleClock,
+    @SerialName("Sample.Periodic") SamplePeriodic,
+    @SerialName("Transaction.Begin") TransactionBegin,
+    @SerialName("Transaction.End") TransactionEnd,
     Trigger,
-    Other
+    Other,
 }
 
 enum class ValueFormat {
@@ -315,42 +317,49 @@ enum class ValueFormat {
     SignedData
 }
 
-enum class Measurand {
-    `Energy.Active.Export.Register`,
-    `Energy.Active.Import.Register`,
-    `Energy.Reactive.Export.Register`,
-    `Energy.Reactive.Import.Register`,
-    `Energy.Active.Export.Interval`,
-    `Energy.Active.Import.Interval`,
-    `Energy.Reactive.Export.Interval`,
-    `Energy.Reactive.Import.Interval`,
-    `Power.Active.Export`,
-    `Power.Active.Import`,
-    `Power.Offered`,
-    `Power.Reactive.Export`,
-    `Power.Reactive.Import`,
-    `Power.Factor`,
-    `Current.Import`,
-    `Current.Export`,
-    `Current.Offered`,
-    Voltage,
-    Frequency,
-    Temperature,
-    SoC,
-    RPM
+/**
+ * OCPP measurands. The wire form uses dotted names (e.g. "Power.Active.Import"), but a dot is an
+ * illegal JVM field identifier, so the constants get legal names and carry the wire value as both a
+ * @SerialName (for (de)serialisation) and a [wire] property (for matching in code via [wire]).
+ */
+@Serializable
+enum class Measurand(val wire: String) {
+    @SerialName("Energy.Active.Export.Register") EnergyActiveExportRegister("Energy.Active.Export.Register"),
+    @SerialName("Energy.Active.Import.Register") EnergyActiveImportRegister("Energy.Active.Import.Register"),
+    @SerialName("Energy.Reactive.Export.Register") EnergyReactiveExportRegister("Energy.Reactive.Export.Register"),
+    @SerialName("Energy.Reactive.Import.Register") EnergyReactiveImportRegister("Energy.Reactive.Import.Register"),
+    @SerialName("Energy.Active.Export.Interval") EnergyActiveExportInterval("Energy.Active.Export.Interval"),
+    @SerialName("Energy.Active.Import.Interval") EnergyActiveImportInterval("Energy.Active.Import.Interval"),
+    @SerialName("Energy.Reactive.Export.Interval") EnergyReactiveExportInterval("Energy.Reactive.Export.Interval"),
+    @SerialName("Energy.Reactive.Import.Interval") EnergyReactiveImportInterval("Energy.Reactive.Import.Interval"),
+    @SerialName("Power.Active.Export") PowerActiveExport("Power.Active.Export"),
+    @SerialName("Power.Active.Import") PowerActiveImport("Power.Active.Import"),
+    @SerialName("Power.Offered") PowerOffered("Power.Offered"),
+    @SerialName("Power.Reactive.Export") PowerReactiveExport("Power.Reactive.Export"),
+    @SerialName("Power.Reactive.Import") PowerReactiveImport("Power.Reactive.Import"),
+    @SerialName("Power.Factor") PowerFactor("Power.Factor"),
+    @SerialName("Current.Import") CurrentImport("Current.Import"),
+    @SerialName("Current.Export") CurrentExport("Current.Export"),
+    @SerialName("Current.Offered") CurrentOffered("Current.Offered"),
+    @SerialName("Voltage") Voltage("Voltage"),
+    @SerialName("Frequency") Frequency("Frequency"),
+    @SerialName("Temperature") Temperature("Temperature"),
+    @SerialName("SoC") SoC("SoC"),
+    @SerialName("RPM") RPM("RPM"),
 }
 
+@Serializable
 enum class Phase {
     L1,
     L2,
     L3,
     N,
-    `L1-N`,
-    `L2-N`,
-    `L3-N`,
-    `L1-L2`,
-    `L2-L3`,
-    `L3-L1`
+    @SerialName("L1-N") L1N,
+    @SerialName("L2-N") L2N,
+    @SerialName("L3-N") L3N,
+    @SerialName("L1-L2") L1L2,
+    @SerialName("L2-L3") L2L3,
+    @SerialName("L3-L1") L3L1,
 }
 
 enum class Location {

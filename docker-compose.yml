@@ -1,0 +1,32 @@
+services:
+  ems-server:
+    build: .
+    image: ems-server:latest
+    container_name: ems-server
+    restart: unless-stopped
+    network_mode: host          # reach LAN Modbus/HTTP devices + accept charger OCPP on :8080
+    environment:
+      EMS_CONFIG: /config/config.yaml
+    volumes:
+      - ./deploy/config.yaml:/config/config.yaml:ro
+      - ems-data:/data
+
+  netbird:
+    image: netbirdio/netbird:latest
+    container_name: netbird
+    restart: unless-stopped
+    network_mode: host          # WireGuard peer; reaches ems-server at 127.0.0.1:8080
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      # Provide a reusable setup key from the NetBird dashboard (see the runbook).
+      NB_SETUP_KEY: ${NB_SETUP_KEY:?set NB_SETUP_KEY in .env or the environment}
+      NB_HOSTNAME: ems-nas
+    volumes:
+      - netbird-config:/etc/netbird
+
+volumes:
+  ems-data:
+  netbird-config:

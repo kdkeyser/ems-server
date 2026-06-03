@@ -1,0 +1,44 @@
+# Validation harness for the "Domain target + Docker network alias" approach.
+#
+# Question being tested: does NetBird's Reverse Proxy resolve a "Domain" target
+# (e.g. whoami.lan) from the routing peer's own resolver — i.e. Docker's embedded
+# DNS — so a network alias is enough, with no real public DNS record?
+#
+# Setup: traefik/whoami (a tiny HTTP echo server on :80) sits behind a rootless
+# NetBird peer on a shared bridge. whoami is reachable as `whoami.lan` from inside
+# the peer container via the alias below. You then point a NetBird RP HTTP service
+# at Domain `whoami.lan:80` (routing peer `whoami-test`) and curl the public URL.
+#
+# Usage:  NB_SETUP_KEY=<reusable-key> ./run.sh up    (then follow the printed steps)
+#         ./run.sh down                              (tears down + removes volume)
+services:
+  whoami:
+    image: traefik/whoami
+    container_name: whoami-test
+    restart: unless-stopped
+    networks:
+      testnet:
+        aliases:
+          - whoami.lan          # the dotted name to enter as the NetBird Domain target
+    # traefik/whoami listens on :80 and echoes request headers, hostname and IP,
+    # so a successful response proves traffic reached THIS container.
+
+  netbird:
+    image: netbirdio/netbird:rootless-latest
+    container_name: netbird-whoami-test
+    hostname: whoami-test        # becomes the peer name in the NetBird dashboard
+    restart: unless-stopped
+    environment:
+      NB_SETUP_KEY: ${NB_SETUP_KEY:?set NB_SETUP_KEY=<reusable netbird setup key> in the environment}
+    volumes:
+      - netbird-whoami-client:/var/lib/netbird
+    networks:
+      - testnet
+
+networks:
+  testnet:
+    name: netbird-whoami-testnet   # explicit name so run.sh can attach a probe container
+    driver: bridge
+
+volumes:
+  netbird-whoami-client:

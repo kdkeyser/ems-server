@@ -45,3 +45,7 @@ local.properties
 # SQLite database created at config.database.path (default: ems.db)
 ems.db
 *.db
+
+### Deploy artifacts ###
+# Container image bundle produced by deploy/build-podman.sh
+ems-images.tar.gz

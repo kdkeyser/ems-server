@@ -12,8 +12,8 @@
 # deploy/netbird-whoami-test harness). See the runbook.
 services:
   ems-server:
-    image: ems-server:latest
-    pull_policy: never          # built locally / loaded from the tarball, never pulled
+    image: localhost/ems-server:latest   # matches the tag in the Podman-built tarball
+    pull_policy: never                   # loaded via `docker load`, never pulled
     container_name: ems-server
     restart: unless-stopped
     # Bridge network: outbound to LAN Modbus/HTTP devices (192.168.129.x) works via

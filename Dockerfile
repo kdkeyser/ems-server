@@ -1,5 +1,5 @@
 # ---- Stage 1: build the fat jar ----
-FROM eclipse-temurin:21-jdk AS build
+FROM docker.io/library/eclipse-temurin:21-jdk AS build
 WORKDIR /app
 
 # Warm the Gradle wrapper/deps cache on dependency files first for better layer caching.
@@ -12,7 +12,7 @@ COPY src ./src
 RUN ./gradlew --no-daemon shadowJar
 
 # ---- Stage 2: runtime ----
-FROM eclipse-temurin:21-jre AS runtime
+FROM docker.io/library/eclipse-temurin:21-jre AS runtime
 WORKDIR /app
 
 # Run as a non-root user. Pre-create + own /data and /config so that a freshly-created

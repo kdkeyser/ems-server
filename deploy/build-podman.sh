@@ -25,7 +25,10 @@
 set -euo pipefail
 
 # --- defaults ---
-IMAGE="ems-server"
+# Podman namespaces local builds under localhost/. Keep that prefix in the tag so the
+# image name in the archive matches docker-compose.yml after `docker load` on the NAS
+# (a bare `ems-server:latest` would be normalized to docker.io/library/... and not match).
+IMAGE="localhost/ems-server"
 TAG="latest"
 NETBIRD_IMAGE="docker.io/netbirdio/netbird:rootless-latest"
 OUTPUT=""   # resolved to <repo>/ems-images.tar.gz after we know the repo root

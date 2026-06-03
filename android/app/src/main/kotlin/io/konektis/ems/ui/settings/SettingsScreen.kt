@@ -36,8 +36,9 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
     var serverUrl by rememberSaveable(saved.serverUrl) { mutableStateOf(saved.serverUrl) }
     var username  by rememberSaveable(saved.username)  { mutableStateOf(saved.username) }
     var password  by rememberSaveable(saved.password)  { mutableStateOf(saved.password) }
-    var useTls    by rememberSaveable(saved.useTls)    { mutableStateOf(saved.useTls) }
-    var apiKey    by rememberSaveable(saved.apiKey)    { mutableStateOf(saved.apiKey) }
+    var useTls         by rememberSaveable(saved.useTls)              { mutableStateOf(saved.useTls) }
+    var cfId           by rememberSaveable(saved.cfAccessClientId)    { mutableStateOf(saved.cfAccessClientId) }
+    var cfSecret       by rememberSaveable(saved.cfAccessClientSecret){ mutableStateOf(saved.cfAccessClientSecret) }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -73,9 +74,15 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
-                value = apiKey,
-                onValueChange = { apiKey = it },
-                label = { Text("API key (remote)") },
+                value = cfId,
+                onValueChange = { cfId = it },
+                label = { Text("CF Access Client ID") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = cfSecret,
+                onValueChange = { cfSecret = it },
+                label = { Text("CF Access Client Secret") },
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -95,7 +102,8 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
                             username = username.trim(),
                             password = password,
                             useTls = useTls,
-                            apiKey = apiKey.trim()
+                            cfAccessClientId = cfId.trim(),
+                            cfAccessClientSecret = cfSecret.trim()
                         )
                     )
                     onBack()

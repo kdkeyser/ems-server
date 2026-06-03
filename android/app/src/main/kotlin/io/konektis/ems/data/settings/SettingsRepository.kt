@@ -15,7 +15,8 @@ data class Settings(
     val username: String = "",
     val password: String = "",
     val useTls: Boolean = false,
-    val apiKey: String = ""
+    val cfAccessClientId: String = "",
+    val cfAccessClientSecret: String = ""
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore("ems_settings")
@@ -30,7 +31,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             username  = prefs[KEY_USERNAME]   ?: DEFAULT_USERNAME,
             password  = prefs[KEY_PASSWORD]   ?: DEFAULT_PASSWORD,
             useTls    = prefs[KEY_USE_TLS]    ?: DEFAULT_USE_TLS,
-            apiKey    = prefs[KEY_API_KEY]    ?: DEFAULT_API_KEY
+            cfAccessClientId     = prefs[KEY_CF_ID]     ?: DEFAULT_CF_ID,
+            cfAccessClientSecret = prefs[KEY_CF_SECRET] ?: DEFAULT_CF_SECRET
         )
     }
 
@@ -40,7 +42,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             prefs[KEY_USERNAME]   = settings.username
             prefs[KEY_PASSWORD]   = settings.password
             prefs[KEY_USE_TLS]    = settings.useTls
-            prefs[KEY_API_KEY]    = settings.apiKey
+            prefs[KEY_CF_ID]      = settings.cfAccessClientId
+            prefs[KEY_CF_SECRET]  = settings.cfAccessClientSecret
         }
     }
 
@@ -49,12 +52,14 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         const val DEFAULT_USERNAME   = "user"
         const val DEFAULT_PASSWORD   = "password"
         const val DEFAULT_USE_TLS    = false
-        const val DEFAULT_API_KEY    = ""
+        const val DEFAULT_CF_ID      = ""
+        const val DEFAULT_CF_SECRET  = ""
 
         private val KEY_SERVER_URL = stringPreferencesKey("server_url")
         private val KEY_USERNAME   = stringPreferencesKey("username")
         private val KEY_PASSWORD   = stringPreferencesKey("password")
         private val KEY_USE_TLS    = booleanPreferencesKey("use_tls")
-        private val KEY_API_KEY    = stringPreferencesKey("api_key")
+        private val KEY_CF_ID      = stringPreferencesKey("cf_access_client_id")
+        private val KEY_CF_SECRET  = stringPreferencesKey("cf_access_client_secret")
     }
 }

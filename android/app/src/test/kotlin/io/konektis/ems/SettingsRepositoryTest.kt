@@ -28,8 +28,9 @@ class SettingsRepositoryTest {
         assertEquals(SettingsRepository.DEFAULT_SERVER_URL, s.serverUrl)
         assertEquals(SettingsRepository.DEFAULT_USERNAME, s.username)
         assertEquals(SettingsRepository.DEFAULT_PASSWORD, s.password)
-        assertFalse(s.useTls)            // default off for LAN/dev
-        assertEquals("", s.apiKey)       // no key by default
+        assertFalse(s.useTls)                       // default off for LAN/dev
+        assertEquals("", s.cfAccessClientId)        // no CF token by default
+        assertEquals("", s.cfAccessClientSecret)
     }
 
     @Test
@@ -40,7 +41,8 @@ class SettingsRepositoryTest {
                 username = "user",
                 password = "pass",
                 useTls = true,
-                apiKey = "secret-key"
+                cfAccessClientId = "cf-id",
+                cfAccessClientSecret = "cf-secret"
             )
         )
         val s = repo.settingsFlow.first()
@@ -48,7 +50,8 @@ class SettingsRepositoryTest {
         assertEquals("user", s.username)
         assertEquals("pass", s.password)
         assertEquals(true, s.useTls)
-        assertEquals("secret-key", s.apiKey)
+        assertEquals("cf-id", s.cfAccessClientId)
+        assertEquals("cf-secret", s.cfAccessClientSecret)
     }
 
     @Test

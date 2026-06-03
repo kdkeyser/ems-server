@@ -1,15 +1,13 @@
-# Runs the EMS server + a rootless NetBird peer on a shared bridge network.
+# Runs the EMS server + a Cloudflare Tunnel agent on a shared bridge network.
 #
 # Images come from the tarball built by deploy/build-podman.sh — load it first:
 #   docker load -i ems-images.tar.gz
-#   NB_SETUP_KEY=<reusable-setup-key> docker compose up -d
+#   TUNNEL_TOKEN=<cloudflare-tunnel-token> docker compose up -d
 #
-# Both services share Compose's default bridge network. The NetBird peer reaches
-# the server via the alias  ems-server.lan  — set that as the Reverse Proxy target
-# in the dashboard (Type: Domain, host ems-server.lan, port 8080, routing peer
-# ems-nas). The alias is dotted so it passes NetBird's domain validation, and the
-# routing peer resolves it through Docker's embedded DNS (validated with the
-# deploy/netbird-whoami-test harness). See the runbook.
+# cloudflared dials OUT to the Cloudflare edge (no inbound ports) and reaches the
+# server over the shared bridge as http://ems-server:8080 (set that as the tunnel's
+# public-hostname service). TLS, the WebSocket upgrade, path scoping (/ws + /status-ws
+# only), and the Access service-token check are handled at the Cloudflare edge. See the runbook.
 services:
   ems-server:
     image: localhost/ems-server:latest   # matches the tag in the Podman-built tarball
@@ -21,30 +19,20 @@ services:
     # (/status, /ocpp-ui) are reachable on the NAS's port 8080.
     ports:
       - "8080:8080"
-    networks:
-      default:
-        aliases:
-          - ems-server.lan      # NetBird RP "Domain" target (resolved via Docker DNS)
     environment:
       EMS_CONFIG: /config/config.yaml
     volumes:
       - ./deploy/config.yaml:/config/config.yaml:ro
       - ems-data:/data
 
-  netbird:
-    image: netbirdio/netbird:rootless-latest
-    container_name: netbird
-    hostname: ems-nas           # becomes the peer name in the NetBird dashboard
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
     restart: unless-stopped
-    # Rootless image: WireGuard runs in userspace (gVisor netstack), so it needs
-    # NO NET_ADMIN capability and NO /dev/net/tun device. Meant for inbound /
-    # routing-peer use, which is exactly the Reverse Proxy case.
+    command: tunnel --no-autoupdate run
     environment:
-      # Reusable setup key from the NetBird dashboard (see the runbook).
-      NB_SETUP_KEY: ${NB_SETUP_KEY:?set NB_SETUP_KEY in .env or the environment}
-    volumes:
-      - netbird-client:/var/lib/netbird
+      # Token from the Cloudflare dashboard tunnel (see the runbook).
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env or the environment}
 
 volumes:
   ems-data:
-  netbird-client:

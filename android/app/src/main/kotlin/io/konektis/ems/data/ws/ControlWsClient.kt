@@ -8,7 +8,6 @@ import io.konektis.ems.data.settings.SettingsRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.header
-import io.ktor.http.HttpHeaders
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CancellationException
@@ -55,9 +54,7 @@ class ControlWsClient(
                         client.webSocket(
                             urlString = wsUrl(s.serverUrl, s.useTls, "/ws"),
                             request = {
-                                if (s.apiKey.isNotBlank()) {
-                                    header(HttpHeaders.Authorization, "Bearer ${s.apiKey}")
-                                }
+                                edgeAuthHeaders(s).forEach { (name, value) -> header(name, value) }
                             }
                         ) {
                             attempt = 0

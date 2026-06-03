@@ -55,9 +55,7 @@ class ControlWsClient(
                         client.webSocket(
                             urlString = wsUrl(s.serverUrl, s.useTls, "/ws"),
                             request = {
-                                if (s.apiKey.isNotBlank()) {
-                                    header(HttpHeaders.Authorization, "Bearer ${s.apiKey}")
-                                }
+                                // TODO(task-2): wire CF Access headers (cfAccessClientId / cfAccessClientSecret)
                             }
                         ) {
                             attempt = 0

@@ -4,11 +4,11 @@
 # tarball for transfer to the NAS.
 #
 # Produces ONE gzipped multi-image archive containing both containers:
-#   - ems-server  (built from this repo's Dockerfile)
-#   - netbird     (rootless image, pulled from Docker Hub)
+#   - ems-server   (built from this repo's Dockerfile, tagged localhost/ems-server:latest)
+#   - cloudflared  (Cloudflare Tunnel agent, pulled from Docker Hub)
 #
-# The archive is in docker-archive format, so `docker load` on the NAS reads it
-# directly. Then `docker compose up -d` runs both (see docker-compose.yml).
+# The archive is docker-archive format, so `docker load` on the NAS reads it directly.
+# Then `docker compose up -d` runs both (see docker-compose.yml).
 #
 # Usage:
 #   deploy/build-podman.sh                      # build + pull + bundle -> ems-images.tar.gz
@@ -16,21 +16,20 @@
 #   deploy/build-podman.sh --output /tmp/x.tar.gz   # write the bundle elsewhere
 #
 # Transfer + run on the NAS:
-#   scp ems-images.tar.gz docker-compose.yml deploy/config.yaml admin@<NAS>:/Volume1/docker/ems/
+#   scp ems-images.tar.gz docker-compose.yml deploy/config.yaml .env admin@<NAS>:/Volume1/docker/ems/
 #   ssh admin@<NAS>
-#   cd /Volume1/docker/ems
-#   docker load -i ems-images.tar.gz
-#   NB_SETUP_KEY=<key> docker compose up -d
+#   cd /Volume1/docker/ems && docker load -i ems-images.tar.gz
+#   TUNNEL_TOKEN=<token> docker compose up -d
 
 set -euo pipefail
 
 # --- defaults ---
-# Podman namespaces local builds under localhost/. Keep that prefix in the tag so the
-# image name in the archive matches docker-compose.yml after `docker load` on the NAS
-# (a bare `ems-server:latest` would be normalized to docker.io/library/... and not match).
+# Podman namespaces local builds under localhost/. Keep that prefix so the image name in
+# the archive matches docker-compose.yml after `docker load` on the NAS (a bare
+# ems-server:latest would be normalized to docker.io/library/... and not match).
 IMAGE="localhost/ems-server"
 TAG="latest"
-NETBIRD_IMAGE="docker.io/netbirdio/netbird:rootless-latest"
+CLOUDFLARED_IMAGE="docker.io/cloudflare/cloudflared:latest"
 OUTPUT=""   # resolved to <repo>/ems-images.tar.gz after we know the repo root
 
 # --- parse args ---
@@ -74,15 +73,15 @@ fi
 echo "==> Building $IMAGE:$TAG from $REPO_ROOT/Dockerfile"
 podman build -t "$IMAGE:$TAG" -f "$REPO_ROOT/Dockerfile" "$REPO_ROOT"
 
-echo "==> Pulling $NETBIRD_IMAGE"
-podman pull "$NETBIRD_IMAGE"
+echo "==> Pulling $CLOUDFLARED_IMAGE"
+podman pull "$CLOUDFLARED_IMAGE"
 
 echo "==> Bundling both images into $OUTPUT"
 # -m / --multi-image-archive: put several images in one docker-archive (docker-loadable).
-podman save -m "$IMAGE:$TAG" "$NETBIRD_IMAGE" | gzip > "$OUTPUT"
+podman save -m "$IMAGE:$TAG" "$CLOUDFLARED_IMAGE" | gzip > "$OUTPUT"
 
 echo "==> Done. Wrote $OUTPUT ($(du -h "$OUTPUT" | cut -f1)) containing:"
 echo "      $IMAGE:$TAG"
-echo "      $NETBIRD_IMAGE"
+echo "      $CLOUDFLARED_IMAGE"
 echo
 echo "    Load on the NAS with:  docker load -i $(basename "$OUTPUT")"

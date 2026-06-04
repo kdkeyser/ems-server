@@ -114,12 +114,18 @@ function createCard(id) {
   startBtn.textContent = 'Start';
   startBtn.dataset.cp = id;
   startBtn.addEventListener('click', () => startTx(id));
+  const stopBtn = document.createElement('button');
+  stopBtn.className = 'secondary';
+  stopBtn.textContent = 'Stop';
+  stopBtn.disabled = true; // enabled only while a transaction is active (see updateCard)
+  stopBtn.dataset.cp = id;
+  stopBtn.addEventListener('click', () => stopTx(id));
   const resetBtn = document.createElement('button');
   resetBtn.className = 'secondary';
   resetBtn.textContent = 'Reset';
   resetBtn.dataset.cp = id;
   resetBtn.addEventListener('click', () => resetCp(id));
-  actionRow.append(startBtn, resetBtn);
+  actionRow.append(startBtn, stopBtn, resetBtn);
 
   // Manual charging control: set a current limit (bypasses EMS auto) or clear stuck profiles.
   const controlRow = document.createElement('div');
@@ -143,7 +149,7 @@ function createCard(id) {
 
   div.append(headRow, meta, connectors, settingsRow, actionRow, controlRow);
 
-  const entry = { card: div, refs: { scPill, prPill, meta, connectors, maxA, auto, ampsInput, connInput } };
+  const entry = { card: div, refs: { scPill, prPill, meta, connectors, maxA, auto, ampsInput, connInput, stopBtn } };
   cards[id] = entry;
   return entry;
 }
@@ -171,6 +177,11 @@ function updateCard(entry, c) {
     row.append(left, right);
     r.connectors.append(row);
   });
+
+  // Enable Stop only while a transaction is live; remember its id for the stop call.
+  const active = c.connectors.find(x => x.transactionId != null);
+  entry.activeTx = active ? active.transactionId : null;
+  r.stopBtn.disabled = active == null;
 }
 
 function render(state) {
@@ -282,6 +293,12 @@ async function startTx(id) {
   const connectorId = parseInt(entry.refs.connInput.value, 10) || 1;
   const r = await api('/chargepoints/' + id + '/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({idTag, connectorId}) });
   if (!r.ok) alert('Start failed — charger rejected (check the idTag / connector) or offline.');
+}
+async function stopTx(id) {
+  const entry = cards[id];
+  if (!entry || entry.activeTx == null) { alert('No active transaction to stop.'); return; }
+  const r = await api('/chargepoints/' + id + '/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({transactionId: entry.activeTx}) });
+  if (!r.ok) alert('Stop failed — charger rejected or offline.');
 }
 async function resetCp(id) {
   await api('/chargepoints/' + id + '/reset', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type:'Soft'}) });

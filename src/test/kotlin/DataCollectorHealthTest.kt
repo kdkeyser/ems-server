@@ -153,4 +153,16 @@ class DataCollectorHealthTest {
 
         assertEquals("Connected", collector.statusStateFlow.value!!.chargerConnection)
     }
+
+    @Test
+    fun `refresh leaves chargerConnection null when the charger is offline`() = runTest {
+        val charger = mockk<Charger>()
+        coEvery { charger.update() } throws Exception("timeout")
+        coEvery { charger.getState() } returns null
+
+        val collector = DataCollector(1, makeWorld(chargers = mapOf("Webasto" to charger)))
+        collector.refresh()
+
+        assertNull(collector.statusStateFlow.value!!.chargerConnection)
+    }
 }

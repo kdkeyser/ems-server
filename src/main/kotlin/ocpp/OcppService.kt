@@ -215,6 +215,10 @@ class OcppService(
     fun latestPowerW(chargePointId: String, connectorId: Int): Int? =
         sessions[chargePointId]?.connectors?.get(connectorId)?.lastPowerW
 
+    /** Latest known OCPP connector status, or null if the charge point/connector is unknown. */
+    fun connectorStatus(chargePointId: String, connectorId: Int): ChargePointStatus? =
+        sessions[chargePointId]?.connectors?.get(connectorId)?.status
+
     /** True when the charge point is connected and advertised SmartCharging support. */
     fun isPowerControlCapable(chargePointId: String): Boolean =
         sessions[chargePointId]?.smartChargingSupported == true

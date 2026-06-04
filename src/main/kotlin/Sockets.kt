@@ -93,18 +93,18 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
                                 if (!authenticated) {
                                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication required"))
                                 } else {
+                                    // The modeJob collector echoes the resulting ModeUpdate; no explicit send here.
                                     energyManager.setMode(
                                         if (message.mode == ManagerMode.AUTO) io.konektis.ems.Mode.AUTO else io.konektis.ems.Mode.MANUAL
                                     )
-                                    send(Json.encodeToString(Message.ModeUpdate(message.mode) as Message))
                                 }
                             }
                             is ClientMessage.SetCharging -> {
                                 if (!authenticated) {
                                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication required"))
                                 } else {
+                                    // The chargingJob collector echoes the resulting ChargingStateUpdate; no explicit send here.
                                     energyManager.setCharging(message.chargingState)
-                                    send(Json.encodeToString(Message.ChargingStateUpdate(message.chargingState) as Message))
                                 }
                             }
                             else -> {

@@ -32,13 +32,12 @@ class EnergyManager(
     val emsStateFlow = MutableStateFlow(EMSState(null, null, null, null, null, null, null))
     val modeFlow = MutableStateFlow(ManagerMode.AUTO)
 
-    @Volatile
-    var chargerControl: ChargingState = ChargingState.ChargingWithExcessPower()
-        private set
     val chargingStateFlow = MutableStateFlow<ChargingState>(ChargingState.ChargingWithExcessPower())
 
+    // Single source of truth: the current control intent is whatever the flow holds.
+    val chargerControl: ChargingState get() = chargingStateFlow.value
+
     fun setCharging(state: ChargingState) {
-        chargerControl = state
         chargingStateFlow.value = state
     }
 

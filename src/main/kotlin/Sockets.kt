@@ -64,6 +64,14 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
                 }
             }
 
+            val chargingJob = launch {
+                energyManager.chargingStateFlow.collect { state ->
+                    if (authenticated) {
+                        send(Json.encodeToString(Message.ChargingStateUpdate(state) as Message))
+                    }
+                }
+            }
+
             incoming.consumeEach { frame ->
                 if (frame is Frame.Text) {
                     val text = frame.readText()
@@ -75,6 +83,7 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
                                     send(Json.encodeToString(Message.Authenticated(message.username) as Message))
                                     // Send the current mode immediately so the client reflects it on connect.
                                     send(Json.encodeToString(Message.ModeUpdate(energyManager.modeFlow.value) as Message))
+                                    send(Json.encodeToString(Message.ChargingStateUpdate(energyManager.chargingStateFlow.value) as Message))
                                 } else {
                                     send(Json.encodeToString(Message.Unauthorized(message.username) as Message))
                                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication failed"))
@@ -88,6 +97,14 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
                                         if (message.mode == ManagerMode.AUTO) io.konektis.ems.Mode.AUTO else io.konektis.ems.Mode.MANUAL
                                     )
                                     send(Json.encodeToString(Message.ModeUpdate(message.mode) as Message))
+                                }
+                            }
+                            is ClientMessage.SetCharging -> {
+                                if (!authenticated) {
+                                    close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication required"))
+                                } else {
+                                    energyManager.setCharging(message.chargingState)
+                                    send(Json.encodeToString(Message.ChargingStateUpdate(message.chargingState) as Message))
                                 }
                             }
                             else -> {

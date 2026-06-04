@@ -16,20 +16,9 @@ import io.konektis.devices.smartConsumers.SmartConsumer
 import io.konektis.devices.smartConsumers.SmartConsumerState
 import io.konektis.ocpp.ChargingRateUnitType
 import io.konektis.ocpp.OcppService
-import io.konektis.ocpp.db.ChargerControlRecord
-import io.konektis.ocpp.db.ChargerControlStore
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
-
-private class FakeChargerControlStore2 : ChargerControlStore {
-    private var rec: ChargerControlRecord? = null
-    override fun init() {}
-    override suspend fun get(id: String): ChargerControlRecord? = rec
-    override suspend fun put(id: String, mode: String, fixedAmps: Int, charging: Boolean) {
-        rec = ChargerControlRecord(id, mode, fixedAmps, charging)
-    }
-}
 
 class OcppEmsIntegrationTest {
 
@@ -63,7 +52,7 @@ class OcppEmsIntegrationTest {
             batteries = mapOf("bat" to battery),
         )
         // config.yaml's first charger entry bounds amps to [6, 32].
-        val manager = EnergyManager(world, loadConfig("/config.yaml"), SurplusPriorityStrategy(), FakeChargerControlStore2())
+        val manager = EnergyManager(world, loadConfig("/config.yaml"), SurplusPriorityStrategy(), FakeChargerControlStore())
 
         manager.tick()
 

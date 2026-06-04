@@ -11,6 +11,8 @@ import io.konektis.devices.charger.ChargerConnection
 import io.konektis.devices.smartConsumers.ConsumeMode
 import io.konektis.ocpp.db.ChargerControlStore
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.time.delay
 import java.time.Duration
 
@@ -41,15 +43,16 @@ class EnergyManager(
     private fun defaultControl() =
         ChargerControl(ChargerMode.SOLAR, config.devices.charger.firstOrNull()?.chargingCurrent?.max?.toInt() ?: 16, true)
 
-    val chargerControlFlow = MutableStateFlow(defaultControl())
-    val chargerControl: ChargerControl get() = chargerControlFlow.value
+    private val _chargerControlFlow = MutableStateFlow(defaultControl())
+    val chargerControlFlow: StateFlow<ChargerControl> = _chargerControlFlow.asStateFlow()
+    private val chargerControl: ChargerControl get() = _chargerControlFlow.value
 
     /** Load the persisted control on startup (call once before run()). */
     suspend fun loadChargerControl() {
         chargerControlStore.init()
         val key = chargerKey ?: return
         val rec = chargerControlStore.get(key) ?: return
-        chargerControlFlow.value = ChargerControl(
+        _chargerControlFlow.value = ChargerControl(
             mode = runCatching { ChargerMode.valueOf(rec.mode) }.getOrDefault(ChargerMode.SOLAR),
             fixedAmps = rec.fixedAmps,
             charging = rec.charging,
@@ -57,7 +60,7 @@ class EnergyManager(
     }
 
     suspend fun setCharging(control: ChargerControl) {
-        chargerControlFlow.value = control
+        _chargerControlFlow.value = control
         val key = chargerKey ?: return
         runCatchingLog("persist charger control") {
             chargerControlStore.put(key, control.mode.name, control.fixedAmps, control.charging)

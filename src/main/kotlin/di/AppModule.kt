@@ -56,6 +56,7 @@ interface AppModule {
     @Provides
     fun provideChargerControlStore(database: Database): ChargerControlStore = SqlChargerControlStore(database)
 
+    @ApplicationScope
     @Provides
     fun provideEnergyManager(world: World, config: Config, strategy: Strategy, chargerControlStore: ChargerControlStore): EnergyManager =
         EnergyManager(world, config, strategy, chargerControlStore)

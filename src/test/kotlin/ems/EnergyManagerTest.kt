@@ -22,8 +22,6 @@ import io.konektis.devices.grid.GridState
 import io.konektis.devices.smartConsumers.ConsumeMode
 import io.konektis.devices.smartConsumers.SmartConsumer
 import io.konektis.devices.smartConsumers.SmartConsumerState
-import io.konektis.ocpp.db.ChargerControlRecord
-import io.konektis.ocpp.db.ChargerControlStore
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -68,15 +66,6 @@ private fun config() = Config(
     websocket = mockk(relaxed = true),
     refreshThreads = 1
 )
-
-private class FakeChargerControlStore : ChargerControlStore {
-    private var rec: ChargerControlRecord? = null
-    override fun init() {}
-    override suspend fun get(id: String): ChargerControlRecord? = rec
-    override suspend fun put(id: String, mode: String, fixedAmps: Int, charging: Boolean) {
-        rec = ChargerControlRecord(id, mode, fixedAmps, charging)
-    }
-}
 
 class EnergyManagerTest {
 
@@ -209,5 +198,16 @@ class EnergyManagerTest {
         val world = World(grid(-5000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
         manager(world).tick()
         coVerify { ch.setMaxChargerPower(Watt(0)) }
+    }
+
+    @Test fun `loadChargerControl restores persisted fixed amps`() = runTest {
+        val store = FakeChargerControlStore()
+        store.put("c", "FIXED", 10, true) // config() charger name is "c"
+        val ch = charger(0)
+        val world = World(grid(0), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
+        val m = EnergyManager(world, config(), SurplusPriorityStrategy(), store)
+        m.loadChargerControl()
+        m.tick()
+        coVerify { ch.setMaxChargerPower(Watt(10 * 230)) }
     }
 }

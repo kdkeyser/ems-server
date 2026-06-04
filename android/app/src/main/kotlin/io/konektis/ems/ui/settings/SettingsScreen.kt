@@ -57,7 +57,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
                 value = serverUrl,
                 onValueChange = { serverUrl = it },
                 label = { Text("Server address") },
-                placeholder = { Text("ec29.ems.konektis.io or 10.0.2.2:8080") },
+                placeholder = { Text("ems.kenas.be or 10.0.2.2:8080") },
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(

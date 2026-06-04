@@ -1,7 +1,7 @@
 # Remote Access Runbook — Cloudflare Tunnel
 
 Exposes the EMS app's two WebSocket endpoints (`/ws`, `/status-ws`) at
-`https://ec29.ems.konektis.io` over TLS, without a fixed IP or open ports. The charger
+`https://ems.kenas.be` over TLS, without a fixed IP or open ports. The charger
 endpoint (`/ocpp/{id}`) and the local admin pages (`/ocpp-ui`, `/status`, `/users`) stay LAN-only.
 
 New to this? Start with the [Getting Started guide](remote-access-getting-started.md).
@@ -11,13 +11,14 @@ See the design spec: `docs/superpowers/specs/2026-06-03-remote-access-cloudflare
 
 - TerraMaster NAS with Docker + docker-compose on the home LAN (`192.168.129.0/24`).
 - A build machine with **Podman** and this repo (image built there, shipped as a tarball).
-- A Cloudflare account; `konektis.io` managed by Cloudflare DNS (step 1).
+- A Cloudflare account; `kenas.be` managed by Cloudflare DNS (step 1).
 
-## 1. Move konektis.io to Cloudflare
+## 1. Confirm kenas.be is on Cloudflare
 
-In the Cloudflare dashboard, add the `konektis.io` zone and switch the registrar's nameservers to
-the pair Cloudflare assigns. Verify all existing records imported (MX/email, other subdomains).
-Wait until the zone status is **Active**.
+`kenas.be` is already on Cloudflare, so there is nothing to migrate — just confirm the zone status
+is **Active** in the dashboard. You do **not** need to create a DNS record for `ems.kenas.be`
+by hand: when you add the tunnel's public hostname (step 5), Cloudflare creates the proxied
+CNAME for `ems.kenas.be` automatically.
 
 ## 2. Prepare the config
 
@@ -63,8 +64,8 @@ The tunnel shows **Healthy** in the dashboard.
 
 In the tunnel's **Public Hostname** config, add (in order):
 
-1. Hostname `ec29.ems.konektis.io`, Path `ws`, Service `http://ems-server:8080`
-2. Hostname `ec29.ems.konektis.io`, Path `status-ws`, Service `http://ems-server:8080`
+1. Hostname `ems.kenas.be`, Path `ws`, Service `http://ems-server:8080`
+2. Hostname `ems.kenas.be`, Path `status-ws`, Service `http://ems-server:8080`
 3. A final **catch-all** rule → Service **`http_status:404`**
 
 Only `/ws` and `/status-ws` reach the server; every other path returns 404, so the admin pages and
@@ -77,7 +78,7 @@ charger endpoint are never exposed.
 
 **Zero Trust → Access → Applications → Add an application → Self-hosted**:
 
-- Application domain: `ec29.ems.konektis.io`, path `ws`. Add a second application for path
+- Application domain: `ems.kenas.be`, path `ws`. Add a second application for path
   `status-ws` (or one app whose path matches both).
 - Policy: action **Service Auth**, include the **service token** created above.
 
@@ -89,18 +90,18 @@ edge. Save the Client ID + Secret for the app's Settings.
 ```bash
 # with the service token -> expect 101 upgrade + StatusState JSON frames
 websocat -H "CF-Access-Client-Id: <id>" -H "CF-Access-Client-Secret: <secret>" \
-  "wss://ec29.ems.konektis.io/status-ws"
+  "wss://ems.kenas.be/status-ws"
 
 # without it -> rejected by Access, no upgrade
-websocat "wss://ec29.ems.konektis.io/status-ws"
+websocat "wss://ems.kenas.be/status-ws"
 
 # /ws with token + correct creds: after the Authenticate frame, expect Authenticated + updates
 websocat -H "CF-Access-Client-Id: <id>" -H "CF-Access-Client-Secret: <secret>" \
-  "wss://ec29.ems.konektis.io/ws"
+  "wss://ems.kenas.be/ws"
 # then type: {"type":"Authenticate","username":"<cfg user>","password":"<cfg pass>"}
 
 # not exposed
-curl -i https://ec29.ems.konektis.io/ocpp-ui   # expect 404
+curl -i https://ems.kenas.be/ocpp-ui   # expect 404
 ```
 
 **LAN unchanged:** `http://<NAS-LAN-IP>:8080/status` still serves `status.html` with no creds;
@@ -108,7 +109,7 @@ the charger still connects to `ws://<NAS-LAN-IP>:8080/ocpp/CP01`.
 
 ## 8. Configure the app
 
-App **Settings**: server `ec29.ems.konektis.io`, **Use TLS on**, **CF Access Client ID** + **CF
+App **Settings**: server `ems.kenas.be`, **Use TLS on**, **CF Access Client ID** + **CF
 Access Client Secret** from step 6, username/password = the `websocket` creds from
 `deploy/config.yaml`.
 

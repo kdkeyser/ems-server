@@ -13,8 +13,8 @@ class WsUrlTest {
     @Test
     fun `wss for remote host without port`() {
         assertEquals(
-            "wss://ec29.ems.konektis.io/status-ws",
-            wsUrl("ec29.ems.konektis.io", useTls = true, path = "/status-ws")
+            "wss://ems.kenas.be/status-ws",
+            wsUrl("ems.kenas.be", useTls = true, path = "/status-ws")
         )
     }
 

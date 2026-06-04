@@ -37,7 +37,7 @@ class SettingsRepositoryTest {
     fun `save and load round-trips`() = testScope.runTest {
         repo.save(
             Settings(
-                serverUrl = "ec29.ems.konektis.io",
+                serverUrl = "ems.kenas.be",
                 username = "user",
                 password = "pass",
                 useTls = true,
@@ -46,7 +46,7 @@ class SettingsRepositoryTest {
             )
         )
         val s = repo.settingsFlow.first()
-        assertEquals("ec29.ems.konektis.io", s.serverUrl)
+        assertEquals("ems.kenas.be", s.serverUrl)
         assertEquals("user", s.username)
         assertEquals("pass", s.password)
         assertEquals(true, s.useTls)

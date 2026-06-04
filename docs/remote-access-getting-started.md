@@ -5,7 +5,7 @@ securely, **without a fixed IP or any open ports** at home. It orients you and l
 detailed [runbook](remote-access-cloudflare-runbook.md) for each step.
 
 The server runs on a TerraMaster NAS in two containers (the EMS server + a Cloudflare Tunnel
-agent, `cloudflared`). Cloudflare gives you a TLS URL `https://ec29.ems.konektis.io` and tunnels
+agent, `cloudflared`). Cloudflare gives you a TLS URL `https://ems.kenas.be` and tunnels
 it over an outbound-only connection to the NAS — nothing is exposed on your router.
 
 > **Why Cloudflare and not NetBird?** NetBird's L7 reverse proxy cannot proxy WebSocket upgrades
@@ -25,7 +25,7 @@ it over an outbound-only connection to the NAS — nothing is exposed on your ro
    solar / battery / heat pump / P1 meter  ◀── Modbus/HTTP (outbound) ─────┘
 ```
 
-- **Remote traffic:** `wss://ec29.ems.konektis.io` → Cloudflare edge (terminates TLS, checks the
+- **Remote traffic:** `wss://ems.kenas.be` → Cloudflare edge (terminates TLS, checks the
   Access service token) → tunnel → `cloudflared` → `ems-server:8080`.
 - **LAN traffic** (charger, admin pages): straight to the NAS's published port 8080, unchanged.
 - **Devices:** the EMS server reaches them outbound from the bridge via the NAS.
@@ -34,7 +34,7 @@ it over an outbound-only connection to the NAS — nothing is exposed on your ro
 
 - A TerraMaster NAS with Docker + docker-compose, on the home LAN.
 - A build machine with **Podman** and this repo (the NAS gets a tarball).
-- A Cloudflare account, with `konektis.io` moved to Cloudflare DNS.
+- A Cloudflare account, with `kenas.be` on Cloudflare DNS (already done).
 
 ## The path, end to end
 
@@ -42,7 +42,7 @@ Each step links to the full runbook. Do them in order.
 
 | # | Step | Runbook |
 |---|------|---------|
-| 1 | **Move DNS** — add `konektis.io` to Cloudflare; switch nameservers. | [§1](remote-access-cloudflare-runbook.md#1-move-konektisio-to-cloudflare) |
+| 1 | **Confirm DNS** — `kenas.be` is already on Cloudflare; verify the zone is Active. | [§1](remote-access-cloudflare-runbook.md#1-confirm-kenasbe-is-on-cloudflare) |
 | 2 | **Config + tunnel** — fill `deploy/config.yaml`; create a token-managed tunnel; `TUNNEL_TOKEN` → `.env`. | [§2](remote-access-cloudflare-runbook.md#2-prepare-the-config), [§3](remote-access-cloudflare-runbook.md#3-create-the-tunnel-token-managed) |
 | 3 | **Build + deploy** — `deploy/build-podman.sh`, `scp`, `docker load`, `docker compose up -d`. | [§4](remote-access-cloudflare-runbook.md#4-build-ship-run) |
 | 4 | **Publish + scope** — public hostname routes only `/ws` + `/status-ws`; catch-all 404. | [§5](remote-access-cloudflare-runbook.md#5-public-hostname--path-scoping) |
@@ -56,7 +56,7 @@ In the app's **Settings**:
 
 | Field | Remote (over the internet) | Local LAN / emulator |
 |-------|----------------------------|----------------------|
-| Server address | `ec29.ems.konektis.io` | `<NAS-LAN-IP>:8080` (emulator: `10.0.2.2:8080`) |
+| Server address | `ems.kenas.be` | `<NAS-LAN-IP>:8080` (emulator: `10.0.2.2:8080`) |
 | Use TLS (wss) | **On** | Off |
 | CF Access Client ID | from the Access service token | leave blank |
 | CF Access Client Secret | from the Access service token | leave blank |

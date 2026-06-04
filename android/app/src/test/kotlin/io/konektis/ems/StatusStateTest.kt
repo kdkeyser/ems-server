@@ -39,4 +39,15 @@ class StatusStateTest {
         )
         assertEquals(state, Json.decodeFromString<StatusState>(Json.encodeToString(state)))
     }
+
+    @Test
+    fun `StatusState round-trips chargerConnection`() {
+        val state = StatusState(
+            devices = emptyList(),
+            totalSolarW = null, gridW = null, batteryW = null,
+            batteryCharge = null, chargerW = 0, heatpumpW = null,
+            chargerConnection = "Connected"
+        )
+        assertEquals(state, Json.decodeFromString<StatusState>(Json.encodeToString(state)))
+    }
 }

@@ -4,8 +4,22 @@ import io.klogging.Klogging
 import io.konektis.GlobalTimeSource
 import io.konektis.devices.DeviceUpdate
 import io.konektis.devices.Watt
+import io.konektis.ocpp.ChargePointStatus
 import io.konektis.ocpp.ChargingRateUnitType
 import io.konektis.ocpp.OcppService
+
+/** Maps an OCPP connector status to the app-facing ChargerConnection. */
+internal fun chargerConnectionFrom(status: ChargePointStatus?): ChargerConnection = when (status) {
+    ChargePointStatus.Available,
+    ChargePointStatus.Reserved,
+    ChargePointStatus.Unavailable -> ChargerConnection.NotConnected
+    ChargePointStatus.Preparing,
+    ChargePointStatus.SuspendedEV,
+    ChargePointStatus.SuspendedEVSE,
+    ChargePointStatus.Finishing -> ChargerConnection.Connected
+    ChargePointStatus.Charging -> ChargerConnection.Charging
+    ChargePointStatus.Faulted, null -> ChargerConnection.Unknown
+}
 
 /**
  * A car charger reached over OCPP 1.6J. Power is read from MeterValues (pushed by the charger)
@@ -23,8 +37,15 @@ class OcppCharger(
     }
 
     override suspend fun getState(): DeviceUpdate<ChargerState>? {
-        val powerW = service.latestPowerW(chargePointId, connectorId) ?: return null
-        return DeviceUpdate(GlobalTimeSource.source.markNow(), ChargerState(Watt(powerW)))
+        val powerW = service.latestPowerW(chargePointId, connectorId)
+        val connection = chargerConnectionFrom(service.connectorStatus(chargePointId, connectorId))
+        // Return a state when we know either the power or the connection; only bail when both are absent
+        // (so a connected-but-idle car still surfaces before any MeterValue arrives).
+        if (powerW == null && connection == ChargerConnection.Unknown) return null
+        return DeviceUpdate(
+            GlobalTimeSource.source.markNow(),
+            ChargerState(Watt(powerW ?: 0), connection)
+        )
     }
 
     override suspend fun setMaxChargerPower(power: Watt) {

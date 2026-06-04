@@ -1,5 +1,6 @@
 package io.konektis.ems
 
+import io.konektis.ChargingState
 import io.konektis.GlobalTimeSource
 import io.konektis.config.ChargingCurrent
 import io.konektis.config.Config
@@ -13,6 +14,7 @@ import io.konektis.devices.World
 import io.konektis.devices.battery.Battery
 import io.konektis.devices.battery.BatteryState
 import io.konektis.devices.charger.Charger
+import io.konektis.devices.charger.ChargerConnection
 import io.konektis.devices.charger.ChargerState
 import io.konektis.devices.grid.Grid
 import io.konektis.devices.grid.GridState
@@ -27,6 +29,7 @@ import io.mockk.mockk
 import io.mockk.runs
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 private fun grid(power: Int?): Grid = mockk<Grid>().also {
     coEvery { it.update() } just runs
@@ -134,5 +137,69 @@ class EnergyManagerTest {
         coVerify(exactly = 1) { bat.releaseToInverter() }
         m.tick()                       // stays manual, no further release
         coVerify(exactly = 1) { bat.releaseToInverter() }
+    }
+
+    @Test fun `setCharging updates chargingStateFlow`() = runTest {
+        val world = World(grid(0), mapOf("c" to charger(0)), emptyMap(), emptyMap(), mapOf("b" to battery(0)))
+        val m = manager(world)
+        m.setCharging(ChargingState.NotCharging())
+        assertTrue(m.chargingStateFlow.value is ChargingState.NotCharging)
+    }
+
+    @Test fun `stop charging forces charger to zero amps in AUTO`() = runTest {
+        val ch = charger(0)
+        // Strong export would normally give the charger surplus amps; Stop overrides to 0.
+        val world = World(grid(-5000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
+        val m = manager(world)
+        m.setCharging(ChargingState.NotCharging())
+        m.tick()
+        coVerify { ch.setMaxChargerPower(Watt(0)) }
+    }
+
+    @Test fun `fixed power sets clamped amps in AUTO`() = runTest {
+        val ch = charger(0)
+        val world = World(grid(0), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
+        val m = manager(world)
+        m.setCharging(ChargingState.ChargingWithMaxPower(3680u)) // 16A
+        m.tick()
+        coVerify { ch.setMaxChargerPower(Watt(16 * 230)) }
+    }
+
+    @Test fun `excess power follows surplus in MANUAL, battery untouched`() = runTest {
+        val ch = charger(0)
+        val bat = battery(0)
+        // grid -3000 export, charger 0 -> available 3000 -> 13A (2990W).
+        val world = World(grid(-3000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to bat))
+        val m = manager(world)
+        m.setMode(Mode.MANUAL)
+        m.setCharging(ChargingState.ChargingWithExcessPower())
+        m.tick()
+        coVerify { ch.setMaxChargerPower(Watt(13 * 230)) }
+        // battery is released once on the AUTO->MANUAL transition and never given a SetPower target here
+        coVerify(exactly = 0) { bat.setChargingPower(any()) }
+    }
+
+    @Test fun `stop charging forces zero in MANUAL`() = runTest {
+        val ch = charger(0)
+        val world = World(grid(-3000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
+        val m = manager(world)
+        m.setMode(Mode.MANUAL)
+        m.setCharging(ChargingState.NotCharging())
+        m.tick()
+        coVerify { ch.setMaxChargerPower(Watt(0)) }
+    }
+
+    @Test fun `no car connected forces charger to zero despite surplus`() = runTest {
+        // charger reports NotConnected; default intent is ExcessPower. Strong export would normally
+        // allocate surplus to the charger, but with no car the EMS must not push power to it.
+        val ch = mockk<Charger>(relaxed = true).also {
+            coEvery { it.getState() } returns DeviceUpdate(
+                GlobalTimeSource.source.markNow(),
+                ChargerState(Watt(0), ChargerConnection.NotConnected)
+            )
+        }
+        val world = World(grid(-5000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
+        manager(world).tick()
+        coVerify { ch.setMaxChargerPower(Watt(0)) }
     }
 }

@@ -36,5 +36,6 @@ data class StatusState(
     val batteryW: Int?,
     val batteryCharge: Int?,
     val chargerW: Int?,
-    val heatpumpW: Int?
+    val heatpumpW: Int?,
+    val chargerConnection: String? = null
 )

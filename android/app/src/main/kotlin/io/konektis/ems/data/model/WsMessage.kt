@@ -30,6 +30,7 @@ sealed class Message {
     @Serializable @SerialName("Authenticated") data class Authenticated(val username: String) : Message()
     @Serializable @SerialName("Unauthorized") data class Unauthorized(val username: String) : Message()
     @Serializable @SerialName("ModeUpdate") data class ModeUpdate(val mode: ManagerMode) : Message()
+    @Serializable @SerialName("ChargingStateUpdate") data class ChargingStateUpdate(val chargingState: ChargingState) : Message()
 }
 
 @Serializable

@@ -29,10 +29,11 @@ fun EmsNavHost(app: EmsApplication) {
 
     val dashboardVm: DashboardViewModel = viewModel(factory = factory {
         DashboardViewModel(
-            statusFlow   = app.component.statusWsClient.statusFlow,
-            controlState = app.component.controlWsClient.connectionState,
-            mode         = app.component.controlWsClient.mode,
-            sendCommand  = { app.component.controlWsClient.send(it) }
+            statusFlow    = app.component.statusWsClient.statusFlow,
+            controlState  = app.component.controlWsClient.connectionState,
+            mode          = app.component.controlWsClient.mode,
+            chargingState = app.component.controlWsClient.chargingState,
+            sendCommand   = { app.component.controlWsClient.send(it) }
         )
     })
 

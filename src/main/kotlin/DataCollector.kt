@@ -14,11 +14,13 @@ class DataCollector(threads: Int, val world: World) : Klogging {
     private val workerPool = Executors.newFixedThreadPool(threads)
     private val dispatcher = workerPool.asCoroutineDispatcher()
     private val healthMap = ConcurrentHashMap<String, DeviceHealth>()
+    private val chargerConnections = ConcurrentHashMap<String, String>()
 
     val statusStateFlow = MutableStateFlow<StatusState?>(null)
 
     suspend fun refresh() {
         withContext(dispatcher) {
+            chargerConnections.clear()
             val jobs = mutableListOf(
                 async { poll("Grid meter", "grid") {
                     world.grid.update()
@@ -37,6 +39,7 @@ class DataCollector(threads: Int, val world: World) : Klogging {
                 jobs.add(async { poll(name, "charger") {
                     charger.update()
                     val state = charger.getState() ?: throw Exception("$name returned no data")
+                    chargerConnections[name] = state.update.connection.name
                     DeviceHealth.Online(System.currentTimeMillis(), state.update.currentPower.value)
                 }})
             }
@@ -72,6 +75,7 @@ class DataCollector(threads: Int, val world: World) : Klogging {
             val batteryCharge = batteryOnline?.extraInfo?.removeSuffix("% SoC")?.toIntOrNull()
             val chargerW = world.chargers.keys.firstOrNull()
                 ?.let { (healthMap[it] as? DeviceHealth.Online)?.powerW }
+            val chargerConnection = world.chargers.keys.firstOrNull()?.let { chargerConnections[it] }
             val heatpumpW = world.smartConsumers.keys.firstOrNull()
                 ?.let { (healthMap[it] as? DeviceHealth.Online)?.powerW }
 
@@ -82,7 +86,8 @@ class DataCollector(threads: Int, val world: World) : Klogging {
                 batteryW = batteryW,
                 batteryCharge = batteryCharge,
                 chargerW = chargerW,
-                heatpumpW = heatpumpW
+                heatpumpW = heatpumpW,
+                chargerConnection = chargerConnection
             )
         }
     }

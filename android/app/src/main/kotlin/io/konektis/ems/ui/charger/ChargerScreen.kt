@@ -31,7 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.konektis.ems.data.ControlState
 import io.konektis.ems.data.model.ChargingState
+import io.konektis.ems.data.model.ManagerMode
 import io.konektis.ems.data.model.StatusState
+import io.konektis.ems.data.model.parseChargerConnection
 import io.konektis.ems.ui.components.EmsIcons
 import io.konektis.ems.ui.components.StatusHero
 import io.konektis.ems.ui.components.formatWatts
@@ -43,15 +45,17 @@ private enum class ChargingMode { SOLAR, MANUAL }
 fun ChargerScreen(
     statusState: StatusState?,
     controlState: ControlState,
+    chargingState: ChargingState?,
+    mode: ManagerMode?,
     onSetCharging: (ChargingState) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val ems = LocalEmsColors.current
     val chargerW = statusState?.chargerW
-    val isCharging = chargerW != null && chargerW > 0
+    val connection = parseChargerConnection(statusState?.chargerConnection)
+    val uiState = chargerUiState(connection)
     val isAuthenticated = controlState is ControlState.Authenticated
-    var chargingMode by remember { mutableStateOf(ChargingMode.SOLAR) }
-    var manualPower by remember { mutableIntStateOf(3680) }
+    val isCharging = uiState == ChargerUiState.CHARGING
 
     Column(
         modifier = modifier
@@ -60,93 +64,148 @@ fun ChargerScreen(
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        StatusHero(
-            icon = EmsIcons.Charger,
-            value = when {
-                chargerW == null -> "—"
-                isCharging -> formatWatts(chargerW)
-                else -> "Idle"
-            },
-            valueColor = if (isCharging) ems.consumption else ems.idle,
-            statusText = if (isCharging) "Charging · Webasto" else "Not charging",
-            online = chargerW != null,
-        )
-
-        if (isAuthenticated) {
-            Text("MODE", style = MaterialTheme.typography.labelSmall, color = ems.idle)
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                SegmentedButton(
-                    selected = chargingMode == ChargingMode.SOLAR,
-                    onClick = { chargingMode = ChargingMode.SOLAR },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                ) { Text("Solar surplus") }
-                SegmentedButton(
-                    selected = chargingMode == ChargingMode.MANUAL,
-                    onClick = { chargingMode = ChargingMode.MANUAL },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                ) { Text("Fixed power") }
-            }
-
-            if (chargingMode == ChargingMode.MANUAL) {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("Max power", style = MaterialTheme.typography.labelSmall, color = ems.idle)
-                            Text(formatWatts(manualPower), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                        Slider(
-                            value = manualPower.toFloat(),
-                            onValueChange = { manualPower = it.toInt() },
-                            valueRange = 1440f..7680f,
-                            steps = 25,
-                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text("1.4 kW", fontSize = 11.sp, color = ems.idle)
-                            Text("7.7 kW", fontSize = 11.sp, color = ems.idle)
-                        }
-                    }
-                }
-            }
-
-            Button(
-                onClick = {
-                    if (isCharging) {
-                        onSetCharging(ChargingState.NotCharging)
-                    } else {
-                        onSetCharging(
-                            when (chargingMode) {
-                                ChargingMode.SOLAR -> ChargingState.ChargingWithExcessPower
-                                ChargingMode.MANUAL -> ChargingState.ChargingWithMaxPower(manualPower.toUInt())
-                            }
-                        )
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isCharging) MaterialTheme.colorScheme.error
-                                     else MaterialTheme.colorScheme.primary,
-                ),
-            ) {
-                Text(
-                    if (isCharging) "STOP CHARGING" else "START CHARGING",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
+        when (uiState) {
+            ChargerUiState.NO_CAR -> {
+                StatusHero(
+                    icon = EmsIcons.Charger,
+                    value = "No car",
+                    valueColor = ems.idle,
+                    statusText = "No car connected",
+                    online = false,
                 )
             }
-        } else {
-            Text(
-                "Charger control unavailable — check credentials in Settings.",
-                fontSize = 14.sp,
-                color = ems.idle,
-            )
+            else -> {
+                // CONNECTED_IDLE/CHARGING come from real OCPP status; CONTROLS_FALLBACK (Unknown/null,
+                // incl. non-OCPP chargers) only knows what power data we have, so don't claim a car.
+                val online = uiState != ChargerUiState.CONTROLS_FALLBACK || chargerW != null
+                StatusHero(
+                    icon = EmsIcons.Charger,
+                    value = when {
+                        isCharging && chargerW != null -> formatWatts(chargerW)
+                        isCharging -> "Charging"
+                        else -> "Idle"
+                    },
+                    valueColor = if (isCharging) ems.consumption else ems.idle,
+                    statusText = when (uiState) {
+                        ChargerUiState.CHARGING -> "Charging"
+                        ChargerUiState.CONNECTED_IDLE -> "Connected — not charging"
+                        else -> if (chargerW != null) "Charger online" else "Status unavailable"
+                    },
+                    online = online,
+                )
+
+                if (isAuthenticated) {
+                    ChargerControls(
+                        isCharging = isCharging,
+                        chargingState = chargingState,
+                        mode = mode,
+                        onSetCharging = onSetCharging,
+                    )
+                } else {
+                    Text(
+                        "Charger control unavailable — check credentials in Settings.",
+                        fontSize = 14.sp,
+                        color = ems.idle,
+                    )
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun ChargerControls(
+    isCharging: Boolean,
+    chargingState: ChargingState?,
+    mode: ManagerMode?,
+    onSetCharging: (ChargingState) -> Unit,
+) {
+    val ems = LocalEmsColors.current
+    // Initialise from the server's authoritative intent; re-keyed when the server pushes a change.
+    var chargingMode by remember(chargingState) {
+        mutableStateOf(
+            if (chargingState is ChargingState.ChargingWithMaxPower) ChargingMode.MANUAL
+            else ChargingMode.SOLAR
+        )
+    }
+    var manualPower by remember(chargingState) {
+        mutableIntStateOf((chargingState as? ChargingState.ChargingWithMaxPower)?.maxPower?.toInt() ?: 3680)
+    }
+
+    Text("MODE", style = MaterialTheme.typography.labelSmall, color = ems.idle)
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        SegmentedButton(
+            selected = chargingMode == ChargingMode.SOLAR,
+            onClick = { chargingMode = ChargingMode.SOLAR },
+            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+        ) { Text("Solar surplus") }
+        SegmentedButton(
+            selected = chargingMode == ChargingMode.MANUAL,
+            onClick = { chargingMode = ChargingMode.MANUAL },
+            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+        ) { Text("Fixed power") }
+    }
+
+    if (mode == ManagerMode.MANUAL && chargingMode == ChargingMode.SOLAR) {
+        Text(
+            "EMS is in manual mode — solar-surplus charging is best-effort and may compete with the battery.",
+            fontSize = 12.sp,
+            color = ems.idle,
+        )
+    }
+
+    if (chargingMode == ChargingMode.MANUAL) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Max power", style = MaterialTheme.typography.labelSmall, color = ems.idle)
+                    Text(formatWatts(manualPower), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Slider(
+                    value = manualPower.toFloat(),
+                    onValueChange = { manualPower = it.toInt() },
+                    valueRange = 1440f..7680f,
+                    steps = 25,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("1.4 kW", fontSize = 11.sp, color = ems.idle)
+                    Text("7.7 kW", fontSize = 11.sp, color = ems.idle)
+                }
+            }
+        }
+    }
+
+    Button(
+        onClick = {
+            if (isCharging) {
+                onSetCharging(ChargingState.NotCharging)
+            } else {
+                onSetCharging(
+                    when (chargingMode) {
+                        ChargingMode.SOLAR -> ChargingState.ChargingWithExcessPower
+                        ChargingMode.MANUAL -> ChargingState.ChargingWithMaxPower(manualPower.toUInt())
+                    }
+                )
+            }
+        },
+        modifier = Modifier.fillMaxWidth().height(56.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isCharging) MaterialTheme.colorScheme.error
+                             else MaterialTheme.colorScheme.primary,
+        ),
+    ) {
+        Text(
+            if (isCharging) "STOP CHARGING" else "START CHARGING",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }

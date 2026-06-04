@@ -14,11 +14,13 @@ class DataCollector(threads: Int, val world: World) : Klogging {
     private val workerPool = Executors.newFixedThreadPool(threads)
     private val dispatcher = workerPool.asCoroutineDispatcher()
     private val healthMap = ConcurrentHashMap<String, DeviceHealth>()
+    @Volatile private var chargerConnection: String? = null
 
     val statusStateFlow = MutableStateFlow<StatusState?>(null)
 
     suspend fun refresh() {
         withContext(dispatcher) {
+            chargerConnection = null
             val jobs = mutableListOf(
                 async { poll("Grid meter", "grid") {
                     world.grid.update()
@@ -37,6 +39,7 @@ class DataCollector(threads: Int, val world: World) : Klogging {
                 jobs.add(async { poll(name, "charger") {
                     charger.update()
                     val state = charger.getState() ?: throw Exception("$name returned no data")
+                    chargerConnection = state.update.connection.name
                     DeviceHealth.Online(System.currentTimeMillis(), state.update.currentPower.value)
                 }})
             }
@@ -82,7 +85,8 @@ class DataCollector(threads: Int, val world: World) : Klogging {
                 batteryW = batteryW,
                 batteryCharge = batteryCharge,
                 chargerW = chargerW,
-                heatpumpW = heatpumpW
+                heatpumpW = heatpumpW,
+                chargerConnection = chargerConnection
             )
         }
     }

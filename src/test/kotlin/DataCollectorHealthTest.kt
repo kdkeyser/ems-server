@@ -6,6 +6,8 @@ import io.konektis.devices.Watt
 import io.konektis.devices.World
 import io.konektis.devices.battery.Battery
 import io.konektis.devices.charger.Charger
+import io.konektis.devices.charger.ChargerConnection
+import io.konektis.devices.charger.ChargerState
 import io.konektis.devices.grid.Grid
 import io.konektis.devices.grid.GridState
 import io.konektis.devices.smartConsumers.SmartConsumer
@@ -135,5 +137,20 @@ class DataCollectorHealthTest {
         val statuses = collector.statusStateFlow.value!!.devices
         assertTrue(statuses.first { it.name == "Solar 1" }.health is DeviceHealth.Offline)
         assertTrue(statuses.first { it.name == "Solar 2" }.health is DeviceHealth.Online)
+    }
+
+    @Test
+    fun `refresh surfaces charger connection in StatusState`() = runTest {
+        val charger = mockk<Charger>()
+        coEvery { charger.update() } just runs
+        coEvery { charger.getState() } returns DeviceUpdate(
+            TimeSource.Monotonic.markNow(),
+            ChargerState(Watt(0), ChargerConnection.Connected)
+        )
+
+        val collector = DataCollector(1, makeWorld(chargers = mapOf("Webasto" to charger)))
+        collector.refresh()
+
+        assertEquals("Connected", collector.statusStateFlow.value!!.chargerConnection)
     }
 }

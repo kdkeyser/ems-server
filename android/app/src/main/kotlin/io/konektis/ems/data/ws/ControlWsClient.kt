@@ -1,6 +1,7 @@
 package io.konektis.ems.data.ws
 
 import io.konektis.ems.data.ControlState
+import io.konektis.ems.data.model.ChargingState
 import io.konektis.ems.data.model.ClientMessage
 import io.konektis.ems.data.model.ManagerMode
 import io.konektis.ems.data.model.Message
@@ -37,6 +38,9 @@ class ControlWsClient(
     // Current EMS mode as reported by the server (null = unknown / not yet received).
     private val _mode = MutableStateFlow<ManagerMode?>(null)
     val mode: StateFlow<ManagerMode?> = _mode.asStateFlow()
+
+    private val _chargingState = MutableStateFlow<ChargingState?>(null)
+    val chargingState: StateFlow<ChargingState?> = _chargingState.asStateFlow()
 
     private val commandChannel = Channel<ClientMessage>(Channel.BUFFERED)
 
@@ -76,10 +80,12 @@ class ControlWsClient(
                                         is Message.Unauthorized -> {
                                             _connectionState.value = ControlState.Unauthenticated
                                             _mode.value = null
+                                            _chargingState.value = null
                                             cmdJob.cancel()
                                             return@webSocket
                                         }
                                         is Message.ModeUpdate -> _mode.value = msg.mode
+                                        is Message.ChargingStateUpdate -> _chargingState.value = msg.chargingState
                                         else -> Unit
                                     }
                                 }
@@ -87,12 +93,14 @@ class ControlWsClient(
                             cmdJob.cancel()
                             _connectionState.value = ControlState.Disconnected()
                             _mode.value = null
+                            _chargingState.value = null
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         _connectionState.value = ControlState.Disconnected(e.message)
                         _mode.value = null
+                        _chargingState.value = null
                     }
                     if (_connectionState.value is ControlState.Unauthenticated) break
                     delay(WS_BACKOFF[minOf(attempt++, WS_BACKOFF.size - 1)])

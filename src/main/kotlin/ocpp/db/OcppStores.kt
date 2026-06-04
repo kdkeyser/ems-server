@@ -142,6 +142,47 @@ class ChargerSettingsStore(private val db: Database) {
     }
 }
 
+data class ChargerControlRecord(val chargePointId: String, val mode: String, val fixedAmps: Int, val charging: Boolean)
+
+/** Persisted per-charger control intent. An interface so EnergyManager unit tests can fake it. */
+interface ChargerControlStore {
+    fun init()
+    suspend fun get(id: String): ChargerControlRecord?
+    suspend fun put(id: String, mode: String, fixedAmps: Int, charging: Boolean)
+}
+
+class SqlChargerControlStore(private val db: Database) : ChargerControlStore {
+    override fun init() = transaction(db) { SchemaUtils.create(OcppChargerControl) }
+
+    override suspend fun get(id: String): ChargerControlRecord? = dbQuery(db) {
+        OcppChargerControl.selectAll().where { OcppChargerControl.chargePointId eq id }.singleOrNull()?.let {
+            ChargerControlRecord(
+                it[OcppChargerControl.chargePointId], it[OcppChargerControl.mode],
+                it[OcppChargerControl.fixedAmps], it[OcppChargerControl.charging],
+            )
+        }
+    }
+
+    override suspend fun put(id: String, mode: String, fixedAmps: Int, charging: Boolean) = dbQuery(db) {
+        val exists = OcppChargerControl.selectAll().where { OcppChargerControl.chargePointId eq id }.any()
+        if (exists) {
+            OcppChargerControl.update({ OcppChargerControl.chargePointId eq id }) {
+                it[OcppChargerControl.mode] = mode
+                it[OcppChargerControl.fixedAmps] = fixedAmps
+                it[OcppChargerControl.charging] = charging
+            }
+        } else {
+            OcppChargerControl.insert {
+                it[chargePointId] = id
+                it[OcppChargerControl.mode] = mode
+                it[OcppChargerControl.fixedAmps] = fixedAmps
+                it[OcppChargerControl.charging] = charging
+            }
+        }
+        Unit
+    }
+}
+
 @Serializable
 data class TransactionRecord(
     val transactionId: Int, val chargePointId: String, val connectorId: Int, val idTag: String?,

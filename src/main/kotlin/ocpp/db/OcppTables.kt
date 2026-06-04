@@ -28,6 +28,14 @@ object OcppChargerSettings : Table("ocpp_charger_settings") {
     override val primaryKey = PrimaryKey(chargePointId)
 }
 
+object OcppChargerControl : Table("ocpp_charger_control") {
+    val chargePointId = varchar("charge_point_id", 64)
+    val mode = varchar("mode", 16)        // "SOLAR" | "FIXED"
+    val fixedAmps = integer("fixed_amps")
+    val charging = bool("charging")
+    override val primaryKey = PrimaryKey(chargePointId)
+}
+
 object OcppTransactions : Table("ocpp_transactions") {
     val id = integer("id").autoIncrement()
     val transactionId = integer("transaction_id")

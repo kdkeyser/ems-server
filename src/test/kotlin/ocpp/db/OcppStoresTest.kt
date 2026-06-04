@@ -130,6 +130,26 @@ class OcppStoresTest {
     }
 
     @Test
+    fun chargerControlRoundTrip() = runTest {
+        val db = freshTestDb()
+        val store = SqlChargerControlStore(db)
+        store.init()
+
+        assertNull(store.get("CP01"))
+        store.put("CP01", mode = "FIXED", fixedAmps = 16, charging = true)
+        val c = store.get("CP01")!!
+        assertEquals("FIXED", c.mode)
+        assertEquals(16, c.fixedAmps)
+        assertTrue(c.charging)
+
+        store.put("CP01", mode = "SOLAR", fixedAmps = 10, charging = false)
+        val c2 = store.get("CP01")!!
+        assertEquals("SOLAR", c2.mode)
+        assertEquals(10, c2.fixedAmps)
+        assertFalse(c2.charging)
+    }
+
+    @Test
     fun recentReturnsNewestFirst() = runTest {
         val db = freshTestDb()
         val store = TransactionStore(db)

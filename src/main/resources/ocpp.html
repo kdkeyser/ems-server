@@ -114,16 +114,42 @@ function createCard(id) {
   startBtn.textContent = 'Start';
   startBtn.dataset.cp = id;
   startBtn.addEventListener('click', () => startTx(id));
+  const stopBtn = document.createElement('button');
+  stopBtn.className = 'secondary';
+  stopBtn.textContent = 'Stop';
+  stopBtn.disabled = true; // enabled only while a transaction is active (see updateCard)
+  stopBtn.dataset.cp = id;
+  stopBtn.addEventListener('click', () => stopTx(id));
   const resetBtn = document.createElement('button');
   resetBtn.className = 'secondary';
   resetBtn.textContent = 'Reset';
   resetBtn.dataset.cp = id;
   resetBtn.addEventListener('click', () => resetCp(id));
-  actionRow.append(startBtn, resetBtn);
+  actionRow.append(startBtn, stopBtn, resetBtn);
 
-  div.append(headRow, meta, connectors, settingsRow, actionRow);
+  // Manual charging control: set a current limit (bypasses EMS auto) or clear stuck profiles.
+  const controlRow = document.createElement('div');
+  controlRow.className = 'row';
+  controlRow.style.marginTop = '8px';
+  const ampsInput = document.createElement('input');
+  ampsInput.type = 'number'; ampsInput.min = '0'; ampsInput.value = '16'; ampsInput.style.width = '64px';
+  const connInput = document.createElement('input');
+  connInput.type = 'number'; connInput.min = '1'; connInput.value = '1'; connInput.style.width = '48px';
+  const controlLabel = document.createElement('span');
+  controlLabel.className = 'muted';
+  controlLabel.append(ampsInput, document.createTextNode(' A · connector '), connInput);
+  const setCurrentBtn = document.createElement('button');
+  setCurrentBtn.textContent = 'Set current';
+  setCurrentBtn.addEventListener('click', () => setCurrent(id));
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'secondary';
+  clearBtn.textContent = 'Clear profile';
+  clearBtn.addEventListener('click', () => clearProfile(id));
+  controlRow.append(controlLabel, setCurrentBtn, clearBtn);
 
-  const entry = { card: div, refs: { scPill, prPill, meta, connectors, maxA, auto } };
+  div.append(headRow, meta, connectors, settingsRow, actionRow, controlRow);
+
+  const entry = { card: div, refs: { scPill, prPill, meta, connectors, maxA, auto, ampsInput, connInput, stopBtn } };
   cards[id] = entry;
   return entry;
 }
@@ -151,6 +177,11 @@ function updateCard(entry, c) {
     row.append(left, right);
     r.connectors.append(row);
   });
+
+  // Enable Stop only while a transaction is live; remember its id for the stop call.
+  const active = c.connectors.find(x => x.transactionId != null);
+  entry.activeTx = active ? active.transactionId : null;
+  r.stopBtn.disabled = active == null;
 }
 
 function render(state) {
@@ -257,11 +288,33 @@ async function addTag() {
 }
 async function delTag(idTag) { await api('/idtags/' + encodeURIComponent(idTag), { method:'DELETE' }); refreshTags(); }
 async function startTx(id) {
+  const entry = cards[id]; if (!entry) return;
   const idTag = prompt('idTag to start with?'); if (!idTag) return;
-  await api('/chargepoints/' + id + '/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({idTag}) });
+  const connectorId = parseInt(entry.refs.connInput.value, 10) || 1;
+  const r = await api('/chargepoints/' + id + '/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({idTag, connectorId}) });
+  if (!r.ok) alert('Start failed — charger rejected (check the idTag / connector) or offline.');
+}
+async function stopTx(id) {
+  const entry = cards[id];
+  if (!entry || entry.activeTx == null) { alert('No active transaction to stop.'); return; }
+  const r = await api('/chargepoints/' + id + '/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({transactionId: entry.activeTx}) });
+  if (!r.ok) alert('Stop failed — charger rejected or offline.');
 }
 async function resetCp(id) {
   await api('/chargepoints/' + id + '/reset', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type:'Soft'}) });
+}
+async function setCurrent(id) {
+  const entry = cards[id]; if (!entry) return;
+  const amps = parseFloat(entry.refs.ampsInput.value);
+  const connectorId = parseInt(entry.refs.connInput.value, 10) || 1;
+  if (!(amps >= 0)) { alert('Enter a current in amps (0 to stop, e.g. 16).'); return; }
+  const r = await api('/chargepoints/' + id + '/set-current', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({amps, connectorId}) });
+  if (!r.ok) alert('Set current failed — charger rejected or offline.');
+}
+async function clearProfile(id) {
+  if (!confirm('Clear all charging profiles on ' + id + '?')) return;
+  const r = await api('/chargepoints/' + id + '/clear-profile', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({}) });
+  if (!r.ok) alert('Clear profile failed — charger rejected or offline.');
 }
 
 function connect() {

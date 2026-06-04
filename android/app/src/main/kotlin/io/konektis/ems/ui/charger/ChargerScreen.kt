@@ -30,7 +30,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.konektis.ems.data.ControlState
-import io.konektis.ems.data.model.ChargerConnection
 import io.konektis.ems.data.model.ChargingState
 import io.konektis.ems.data.model.ManagerMode
 import io.konektis.ems.data.model.StatusState
@@ -76,6 +75,9 @@ fun ChargerScreen(
                 )
             }
             else -> {
+                // CONNECTED_IDLE/CHARGING come from real OCPP status; CONTROLS_FALLBACK (Unknown/null,
+                // incl. non-OCPP chargers) only knows what power data we have, so don't claim a car.
+                val online = uiState != ChargerUiState.CONTROLS_FALLBACK || chargerW != null
                 StatusHero(
                     icon = EmsIcons.Charger,
                     value = when {
@@ -84,8 +86,12 @@ fun ChargerScreen(
                         else -> "Idle"
                     },
                     valueColor = if (isCharging) ems.consumption else ems.idle,
-                    statusText = if (isCharging) "Charging" else "Connected — not charging",
-                    online = true,
+                    statusText = when (uiState) {
+                        ChargerUiState.CHARGING -> "Charging"
+                        ChargerUiState.CONNECTED_IDLE -> "Connected — not charging"
+                        else -> if (chargerW != null) "Charger online" else "Status unavailable"
+                    },
+                    online = online,
                 )
 
                 if (isAuthenticated) {

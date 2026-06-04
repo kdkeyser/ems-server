@@ -11,7 +11,8 @@ data class WorldSnapshot(
     val chargerPower: Watt,
     val heatpumpPower: Watt,
     val chargerMinAmps: Int,      // from config: minimum amps before charger stops
-    val chargerMaxAmps: Int       // from config: maximum amps
+    val chargerMaxAmps: Int,      // from config: maximum amps
+    val chargerOverrideAmps: Int? = null  // non-null = forced charger amps (Stop=0 / Fixed); null = compute from surplus
 )
 
 data class ControlDecisions(

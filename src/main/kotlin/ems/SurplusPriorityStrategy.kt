@@ -45,8 +45,8 @@ class SurplusPriorityStrategy(
             ConsumeMode.SuggestConsumeUpTo(Watt(headroom))
         }
 
-        // Car charger: assign available power in amps, clamped to [min, max]
-        val chargerAmps = when {
+        // Car charger: forced override (Stop/Fixed) wins; otherwise assign available surplus.
+        val chargerAmps = snapshot.chargerOverrideAmps?.coerceIn(0, snapshot.chargerMaxAmps) ?: when {
             available <= 0 -> 0
             else -> {
                 val amps = available / 230

@@ -19,7 +19,8 @@ class SurplusPriorityStrategyTest {
         heatpumpPower: Int = 0,
         batteryCharge: UShort = 50u,
         chargerMinAmps: Int = 6,
-        chargerMaxAmps: Int = 32
+        chargerMaxAmps: Int = 32,
+        chargerOverrideAmps: Int? = null
     ) = WorldSnapshot(
         gridPower = Watt(gridPower),
         solarPower = Watt(solarPower),
@@ -28,7 +29,8 @@ class SurplusPriorityStrategyTest {
         chargerPower = Watt(chargerPower),
         heatpumpPower = Watt(heatpumpPower),
         chargerMinAmps = chargerMinAmps,
-        chargerMaxAmps = chargerMaxAmps
+        chargerMaxAmps = chargerMaxAmps,
+        chargerOverrideAmps = chargerOverrideAmps
     )
 
     @Test
@@ -143,5 +145,26 @@ class SurplusPriorityStrategyTest {
     @Test
     fun `degraded small imbalance within deadband holds current battery power`() {
         assertEquals(Watt(300), strategy.decideDegraded(Watt(40), Watt(300)))
+    }
+
+    @Test
+    fun `charger override is used verbatim and battery projects from it`() {
+        // override 5A (1150W); grid -2000 export, charger 0.
+        // projectedGrid = -2000 + 1150 - 0 = -850 -> battery +850W.
+        val d = strategy.decide(snapshot(gridPower = -2000, chargerPower = 0, chargerOverrideAmps = 5))
+        assertEquals(5, d.chargerMaxAmps)
+        assertEquals(BatteryCommand.SetPower(Watt(850)), d.batteryCommand)
+    }
+
+    @Test
+    fun `charger override zero stops the charger regardless of surplus`() {
+        val d = strategy.decide(snapshot(gridPower = -5000, chargerPower = 0, chargerOverrideAmps = 0))
+        assertEquals(0, d.chargerMaxAmps)
+    }
+
+    @Test
+    fun `charger override clamped to max amps`() {
+        val d = strategy.decide(snapshot(chargerOverrideAmps = 100, chargerMaxAmps = 32))
+        assertEquals(32, d.chargerMaxAmps)
     }
 }

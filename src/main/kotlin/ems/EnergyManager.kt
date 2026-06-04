@@ -1,10 +1,12 @@
 package io.konektis.ems
 
 import io.klogging.Klogging
+import io.konektis.ChargingState
 import io.konektis.ManagerMode
 import io.konektis.config.Config
 import io.konektis.devices.Watt
 import io.konektis.devices.World
+import io.konektis.devices.charger.ChargerConnection
 import io.konektis.devices.smartConsumers.ConsumeMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.time.delay
@@ -30,6 +32,16 @@ class EnergyManager(
     val emsStateFlow = MutableStateFlow(EMSState(null, null, null, null, null, null, null))
     val modeFlow = MutableStateFlow(ManagerMode.AUTO)
 
+    @Volatile
+    var chargerControl: ChargingState = ChargingState.ChargingWithExcessPower()
+        private set
+    val chargingStateFlow = MutableStateFlow<ChargingState>(ChargingState.ChargingWithExcessPower())
+
+    fun setCharging(state: ChargingState) {
+        chargerControl = state
+        chargingStateFlow.value = state
+    }
+
     fun setMode(newMode: Mode) {
         mode = newMode
         modeFlow.value = if (newMode == Mode.AUTO) ManagerMode.AUTO else ManagerMode.MANUAL
@@ -53,31 +65,42 @@ class EnergyManager(
         }
         previousMode = mode
 
-        if (mode != Mode.AUTO) return
+        // No car connected -> force the charger off regardless of intent (don't push surplus to an
+        // empty charger; keeps the battery's deadbeat projection exact). Connected/Charging/Unknown
+        // (incl. non-OCPP chargers that report Unknown) -> use the intent-driven override.
+        val override = configMaxAmps()?.let { maxAmps ->
+            if (emsState.chargerConnection == ChargerConnection.NotConnected) 0
+            else chargerOverrideAmps(maxAmps)
+        }
+
+        if (mode != Mode.AUTO) {
+            // MANUAL: independent charger control (battery/heat pump already released on transition).
+            applyChargerInManual(emsState, override)
+            return
+        }
 
         when {
             // Tier 3 — blind: grid or battery reading missing. Fail toward the inverter.
             emsState.gridPower == null || emsState.batteryPower == null -> {
                 blindTicks++
                 if (blindTicks >= BLIND_RELEASE_TICKS) {
-                    // Retry every blind tick past the threshold: SMABattery.releaseToInverter() is a
-                    // no-op once released, so a failed 803 write is retried until it succeeds rather
-                    // than leaving the battery armed with no steering (fail toward the inverter).
                     logger.warn("Blind for $blindTicks ticks (>= $BLIND_RELEASE_TICKS) — releasing battery to inverter")
                     world.batteries.values.forEach { battery ->
                         runCatchingLog("release battery") { battery.releaseToInverter() }
                     }
                 }
+                // Stop/Fixed are still enforced without surplus data; ExcessPower (null) is left as-is.
+                override?.let { applyChargerAmps(it) }
             }
-            // Tier 1 — full data: run the surplus cascade.
+            // Tier 1 — full data: run the surplus cascade with the charger override folded in.
             emsState.chargerPower != null && emsState.heatpumpPower != null -> {
                 blindTicks = 0
                 val snapshot = buildWorldSnapshot(emsState)
                 if (snapshot != null) {
-                    val decisions = strategy.decide(snapshot)
+                    val decisions = strategy.decide(snapshot.copy(chargerOverrideAmps = override))
                     logger.debug(
                         "control: grid=${emsState.gridPower}W battery=${emsState.batteryPower}W " +
-                            "-> ${decisions.batteryCommand} (target >0 = charge, <0 = discharge)"
+                            "charger=$override -> ${decisions.batteryCommand} (target >0 = charge, <0 = discharge)"
                     )
                     applyDecisions(decisions)
                 }
@@ -93,6 +116,8 @@ class EnergyManager(
                 world.batteries.values.forEach { battery ->
                     runCatchingLog("set battery") { battery.setChargingPower(target) }
                 }
+                // Stop/Fixed enforced; default ExcessPower (null) leaves the charger uncommanded.
+                override?.let { applyChargerAmps(it) }
             }
         }
     }
@@ -123,8 +148,35 @@ class EnergyManager(
             heatpumpPower = heatpumpState?.power?.value,
             solarPower = solarPower,
             batteryPower = batteryState?.power?.value,
-            batteryCharge = batteryState?.charge?.toInt()
+            batteryCharge = batteryState?.charge?.toInt(),
+            chargerConnection = chargerState?.connection
         )
+    }
+
+    /** Max charger amps from config, or null if no charger is configured. */
+    private fun configMaxAmps(): Int? =
+        config.devices.charger.firstOrNull()?.chargingCurrent?.max?.toInt()
+
+    /** Forced charger amps for Stop (0) / Fixed (clamped); null for ExcessPower (use surplus). */
+    private fun chargerOverrideAmps(maxAmps: Int): Int? = when (val c = chargerControl) {
+        is ChargingState.NotCharging -> 0
+        is ChargingState.ChargingWithMaxPower -> (c.maxPower.toInt() / 230).coerceIn(0, maxAmps)
+        is ChargingState.ChargingWithExcessPower -> null
+    }
+
+    private suspend fun applyChargerAmps(amps: Int) {
+        world.chargers.values.forEach { charger ->
+            runCatchingLog("set charger power") { charger.setMaxChargerPower(Watt(amps * 230)) }
+        }
+    }
+
+    /** MANUAL: battery/heat pump are released; still drive the charger per its intent. */
+    private suspend fun applyChargerInManual(emsState: EMSState, override: Int?) {
+        val amps = override ?: run {
+            val snapshot = buildWorldSnapshot(emsState) ?: return
+            strategy.decide(snapshot.copy(chargerOverrideAmps = null)).chargerMaxAmps ?: return
+        }
+        applyChargerAmps(amps)
     }
 
     private fun buildWorldSnapshot(emsState: EMSState): WorldSnapshot? {

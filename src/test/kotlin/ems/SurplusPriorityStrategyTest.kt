@@ -34,24 +34,22 @@ class SurplusPriorityStrategyTest {
     )
 
     @Test
-    fun `large solar surplus — charger gets max amps, battery absorbs the remainder`() {
-        // Exporting 2000W, charger at 2000W. available = 4000W -> 17A (3910W).
-        // projectedGrid = -2000 + 3910 - 2000 = -90 (still 90W export). battery = -(-90) = +90W.
+    fun `large solar surplus — charger gets max amps, battery absorbs the measured export`() {
+        // Exporting 2000W, charger at 2000W. available = 4000W -> 17A (3910W) for the charger.
+        // Battery balances the MEASURED grid: target = batteryPower - gridPower = 0 - (-2000) = +2000W.
         val decisions = strategy.decide(snapshot(gridPower = -2000, chargerPower = 2000))
         assertEquals(17, decisions.chargerMaxAmps)
-        assertEquals(BatteryCommand.SetPower(Watt(90)), decisions.batteryCommand)
+        assertEquals(BatteryCommand.SetPower(Watt(2000)), decisions.batteryCommand)
         assertTrue(decisions.heatpumpConsumeMode is ConsumeMode.Unrestricted)
     }
 
     @Test
-    fun `importing from grid — charger reduces and battery charges the freed surplus`() {
-        // Importing 500W, charger at 3000W. available = 2500W -> 10A (2300W).
-        // projectedGrid = 500 + 2300 - 3000 = -200 (charger reduction now over-produces 200W).
-        // battery = +200W. Charging while *measured* grid imports is correct: the import is caused
-        // by the old charger setpoint we are simultaneously backing off.
+    fun `importing from grid — charger reduces and battery covers the measured import`() {
+        // Importing 500W, charger at 3000W. available = 2500W -> 10A (2300W) for the charger.
+        // Battery balances the MEASURED grid: target = 0 - 500 = -500W (discharge to cover the import).
         val decisions = strategy.decide(snapshot(gridPower = 500, chargerPower = 3000))
         assertEquals(10, decisions.chargerMaxAmps)
-        assertEquals(BatteryCommand.SetPower(Watt(200)), decisions.batteryCommand)
+        assertEquals(BatteryCommand.SetPower(Watt(-500)), decisions.batteryCommand)
     }
 
     @Test
@@ -72,11 +70,11 @@ class SurplusPriorityStrategyTest {
 
     @Test
     fun `charger surplus clamped to max amps`() {
-        // Exporting 10000W, charger at 6000W. available = 16000W -> clamped 32A (7360W).
-        // projectedGrid = -10000 + 7360 - 6000 = -8640. battery = +8640W.
+        // Exporting 10000W, charger at 6000W. available = 16000W -> clamped 32A (7360W) for the charger.
+        // Battery balances the MEASURED grid: target = 0 - (-10000) = +10000W.
         val decisions = strategy.decide(snapshot(gridPower = -10000, chargerPower = 6000, chargerMaxAmps = 32))
         assertEquals(32, decisions.chargerMaxAmps)
-        assertEquals(BatteryCommand.SetPower(Watt(8640)), decisions.batteryCommand)
+        assertEquals(BatteryCommand.SetPower(Watt(10000)), decisions.batteryCommand)
     }
 
     @Test
@@ -94,17 +92,9 @@ class SurplusPriorityStrategyTest {
     }
 
     @Test
-    fun `tiny residual within the deadband leaves the battery untouched`() {
-        // grid=-3000, charger off -> 13A (2990W). projectedGrid = -3000 + 2990 = -10W.
-        // |10| <= 50W deadband, so the battery holds at its current power (0W) instead of chasing 10W.
-        val decisions = strategy.decide(snapshot(gridPower = -3000, batteryPower = 0))
-        assertEquals(BatteryCommand.SetPower(Watt(0)), decisions.batteryCommand)
-    }
-
-    @Test
     fun `holds current battery power when the grid is balanced within the deadband`() {
-        // Battery already charging 500W, grid only 40W off -> within deadband -> hold 500W.
-        // available = 0 + 500 + 40 = 540W -> 2A < 6A min -> charger 0. projectedGrid = -40.
+        // Battery already charging 500W; measured grid only 40W off -> within the 50W deadband -> hold 500W.
+        // available = 0 + 500 + 40 = 540W -> 2A < 6A min -> charger 0.
         val decisions = strategy.decide(snapshot(gridPower = -40, chargerPower = 0, batteryPower = 500))
         assertEquals(0, decisions.chargerMaxAmps)
         assertEquals(BatteryCommand.SetPower(Watt(500)), decisions.batteryCommand)
@@ -148,12 +138,23 @@ class SurplusPriorityStrategyTest {
     }
 
     @Test
-    fun `charger override is used verbatim and battery projects from it`() {
-        // override 5A (1150W); grid -2000 export, charger 0.
-        // projectedGrid = -2000 + 1150 - 0 = -850 -> battery +850W.
+    fun `charger override is used verbatim, battery still balances the measured grid`() {
+        // override 5A; grid -2000 export, charger 0. Charger amps = override = 5.
+        // Battery balances the MEASURED grid: target = 0 - (-2000) = +2000W (independent of the override).
         val d = strategy.decide(snapshot(gridPower = -2000, chargerPower = 0, chargerOverrideAmps = 5))
         assertEquals(5, d.chargerMaxAmps)
-        assertEquals(BatteryCommand.SetPower(Watt(850)), d.batteryCommand)
+        assertEquals(BatteryCommand.SetPower(Watt(2000)), d.batteryCommand)
+    }
+
+    @Test
+    fun `fixed charger the car under-draws — battery soaks the measured surplus, not the setpoint`() {
+        // Fixed 16A commanded, but the car only draws 1000W (measured), so the grid is still exporting
+        // 2000W. The OLD projection would discharge the battery (projectedGrid = -2000 + 3680 - 1000 =
+        // +680 -> battery -680, discharging while exporting). Balancing the MEASURED grid instead:
+        // target = 0 - (-2000) = +2000W (charge), soaking the surplus the car won't take.
+        val d = strategy.decide(snapshot(gridPower = -2000, chargerPower = 1000, chargerOverrideAmps = 16))
+        assertEquals(16, d.chargerMaxAmps)
+        assertEquals(BatteryCommand.SetPower(Watt(2000)), d.batteryCommand)
     }
 
     @Test

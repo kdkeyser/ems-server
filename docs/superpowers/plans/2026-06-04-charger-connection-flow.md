@@ -474,10 +474,11 @@ git commit -m "feat(ems): support forced charger amps override in surplus strate
 
 - [ ] **Step 1: Write the failing tests**
 
-In `src/test/kotlin/ems/EnergyManagerTest.kt`, add the import:
+In `src/test/kotlin/ems/EnergyManagerTest.kt`, add the imports:
 
 ```kotlin
 import io.konektis.ChargingState
+import io.konektis.devices.charger.ChargerConnection
 ```
 
 Add tests inside the class:
@@ -532,7 +533,23 @@ Add tests inside the class:
         m.tick()
         coVerify { ch.setMaxChargerPower(Watt(0)) }
     }
+
+    @Test fun `no car connected forces charger to zero despite surplus`() = runTest {
+        // charger reports NotConnected; default intent is ExcessPower. Strong export would normally
+        // allocate surplus to the charger, but with no car the EMS must not push power to it.
+        val ch = mockk<Charger>(relaxed = true).also {
+            coEvery { it.getState() } returns DeviceUpdate(
+                GlobalTimeSource.source.markNow(),
+                ChargerState(Watt(0), ChargerConnection.NotConnected)
+            )
+        }
+        val world = World(grid(-5000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
+        manager(world).tick()
+        coVerify { ch.setMaxChargerPower(Watt(0)) }
+    }
 ```
+
+Note: the existing `charger(power)` helper builds `ChargerState(Watt(power))`, whose `connection` defaults to `Unknown` — so the Stop/Fixed/ExcessPower tests above (which use `charger(0)`) exercise the intent-driven path, while the new test uses an explicit `NotConnected` charger to exercise the connection-aware override.
 
 Add the import for `assertTrue` if missing:
 
@@ -545,14 +562,44 @@ import kotlin.test.assertTrue
 Run: `./gradlew test --tests "io.konektis.ems.EnergyManagerTest"`
 Expected: FAIL — `setCharging` / `chargingStateFlow` unresolved.
 
-- [ ] **Step 3: Add the control state and tick wiring**
+- [ ] **Step 3: Carry charger connection into `EMSState`**
+
+So the control loop can be connection-aware, add a trailing field to `EMSState` in `src/main/kotlin/ems/EMSState.kt`:
+
+```kotlin
+package io.konektis.ems
+
+import io.konektis.devices.charger.ChargerConnection
+
+data class EMSState(
+    val gridPower : Int?,
+    val gridVoltage : Int?,
+    val chargerPower : Int?,
+    val heatpumpPower : Int?,
+    val solarPower: Int?,
+    val batteryPower : Int?,
+    val batteryCharge: Int?,
+    val chargerConnection: ChargerConnection? = null
+)
+```
+
+In `EnergyManager.buildEMSState()`, set it from the charger state (the `chargerState` local already exists):
+
+```kotlin
+            chargerConnection = chargerState?.connection
+```
+
+(Add it as the final argument of the `EMSState(...)` constructor call.)
+
+- [ ] **Step 4: Add the control state and tick wiring**
 
 In `src/main/kotlin/ems/EnergyManager.kt`:
 
-Add the import:
+Add the imports:
 
 ```kotlin
 import io.konektis.ChargingState
+import io.konektis.devices.charger.ChargerConnection
 ```
 
 Add fields after `modeFlow` (around line 31):
@@ -602,7 +649,13 @@ Add these helpers to the class (near `buildWorldSnapshot`):
 Replace the body of `tick()` from the `if (mode != Mode.AUTO) return` line down to the end of the `when { ... }` with:
 
 ```kotlin
-        val override = configMaxAmps()?.let { chargerOverrideAmps(it) }
+        // No car connected -> force the charger off regardless of intent (don't push surplus to an
+        // empty charger; keeps the battery's deadbeat projection exact). Connected/Charging/Unknown
+        // (incl. non-OCPP chargers that report Unknown) -> use the intent-driven override.
+        val override = configMaxAmps()?.let { maxAmps ->
+            if (emsState.chargerConnection == ChargerConnection.NotConnected) 0
+            else chargerOverrideAmps(maxAmps)
+        }
 
         if (mode != Mode.AUTO) {
             // MANUAL: independent charger control (battery/heat pump already released on transition).
@@ -653,18 +706,18 @@ Replace the body of `tick()` from the `if (mode != Mode.AUTO) return` line down 
         }
 ```
 
-Note: with the default `chargerControl = ChargingWithExcessPower`, `override` is null, so the existing tier-1/tier-2 tests (which never call `setCharging`) behave exactly as before.
+Note: with the default `chargerControl = ChargingWithExcessPower` and a charger reporting `Unknown` (the test helper's default), `override` is null, so the existing tier-1/tier-2 tests (which never call `setCharging`) behave exactly as before.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 5: Run tests to verify they pass**
 
 Run: `./gradlew test --tests "io.konektis.ems.EnergyManagerTest"`
 Expected: PASS (new tests + all pre-existing tier1/tier2/blind/MANUAL tests).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/main/kotlin/ems/EnergyManager.kt src/test/kotlin/ems/EnergyManagerTest.kt
-git commit -m "feat(ems): apply per-charger control intent each tick, independent of mode"
+git add src/main/kotlin/ems/EMSState.kt src/main/kotlin/ems/EnergyManager.kt src/test/kotlin/ems/EnergyManagerTest.kt
+git commit -m "feat(ems): apply per-charger control intent each tick, connection-aware, independent of mode"
 ```
 
 ---

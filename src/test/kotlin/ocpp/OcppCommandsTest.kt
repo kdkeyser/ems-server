@@ -49,6 +49,36 @@ class OcppCommandsTest {
     }
 
     @Test
+    fun clearChargingProfileSendsCallWithConnector() = runTest {
+        val svc = newService()
+        val sent = mutableListOf<Frame>()
+        svc.registerSession("CP1", capturingSession(sent))
+
+        val job = async { svc.clearChargingProfile("CP1", connectorId = 1) }
+        runCurrent()
+        val arr = Json.parseToJsonElement((sent.single() as Frame.Text).readText()).jsonArray
+        assertEquals("ClearChargingProfile", arr[2].jsonPrimitive.content)
+        assertEquals(1, arr[3].jsonObject["connectorId"]?.jsonPrimitive?.int)
+        svc.completeCall(arr[1].jsonPrimitive.content, buildJsonObject { put("status", "Accepted") })
+        assertTrue(job.await())
+    }
+
+    @Test
+    fun clearChargingProfileOmitsConnectorWhenNull() = runTest {
+        val svc = newService()
+        val sent = mutableListOf<Frame>()
+        svc.registerSession("CP1", capturingSession(sent))
+
+        val job = async { svc.clearChargingProfile("CP1", connectorId = null) }
+        runCurrent()
+        val arr = Json.parseToJsonElement((sent.single() as Frame.Text).readText()).jsonArray
+        assertEquals("ClearChargingProfile", arr[2].jsonPrimitive.content)
+        assertFalse(arr[3].jsonObject.containsKey("connectorId"))
+        svc.completeCall(arr[1].jsonPrimitive.content, buildJsonObject { put("status", "Accepted") })
+        assertTrue(job.await())
+    }
+
+    @Test
     fun commandReturnsFalseWhenChargerRepliesError() = runTest {
         val svc = newService()
         val sent = mutableListOf<Frame>()

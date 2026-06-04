@@ -323,6 +323,17 @@ class OcppService(
         return sendCall(chargePointId, Action.SetChargingProfile, payload).isAccepted()
     }
 
+    /**
+     * Clear charging profiles on a connector (or all of them when [connectorId] is null). Used to
+     * unstick a charger left at a 0 A limit. Returns true if the charge point replied Accepted.
+     */
+    suspend fun clearChargingProfile(chargePointId: String, connectorId: Int? = null): Boolean {
+        val payload = buildJsonObject {
+            if (connectorId != null) put("connectorId", connectorId)
+        }
+        return sendCall(chargePointId, Action.ClearChargingProfile, payload).isAccepted()
+    }
+
     suspend fun getConfiguration(chargePointId: String, keys: List<String>? = null): GetConfigurationResponse? {
         val payload = json.encodeToJsonElement(GetConfigurationRequest(keys)).jsonObject
         val reply = sendCall(chargePointId, Action.GetConfiguration, payload) ?: return null

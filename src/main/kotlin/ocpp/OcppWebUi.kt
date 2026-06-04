@@ -17,6 +17,8 @@ import kotlinx.serialization.json.Json
 @Serializable data class StartBody(val idTag: String, val connectorId: Int? = null)
 @Serializable data class StopBody(val transactionId: Int)
 @Serializable data class ResetBody(val type: String = "Soft")
+@Serializable data class SetCurrentBody(val amps: Double, val connectorId: Int = 1)
+@Serializable data class ClearProfileBody(val connectorId: Int? = null)
 
 fun Application.configureOcppWebUi(service: OcppService) {
     val json = Json { encodeDefaults = true }
@@ -83,6 +85,20 @@ fun Application.configureOcppWebUi(service: OcppService) {
                 val body = call.receive<ResetBody>()
                 val type = runCatching { ResetType.valueOf(body.type) }.getOrDefault(ResetType.Soft)
                 val ok = service.reset(call.parameters["id"]!!, type)
+                call.respond(if (ok) HttpStatusCode.OK else HttpStatusCode.BadGateway)
+            }
+            // Manual current override — bypasses the per-charger EMS-auto gate (operator action).
+            post("/chargepoints/{id}/set-current") {
+                val body = call.receive<SetCurrentBody>()
+                val ok = service.setChargingProfile(
+                    call.parameters["id"]!!, body.connectorId, body.amps, ChargingRateUnitType.A
+                )
+                call.respond(if (ok) HttpStatusCode.OK else HttpStatusCode.BadGateway)
+            }
+            // Clear charging profiles (e.g. to unstick a charger left at 0 A).
+            post("/chargepoints/{id}/clear-profile") {
+                val body = call.receive<ClearProfileBody>()
+                val ok = service.clearChargingProfile(call.parameters["id"]!!, body.connectorId)
                 call.respond(if (ok) HttpStatusCode.OK else HttpStatusCode.BadGateway)
             }
         }

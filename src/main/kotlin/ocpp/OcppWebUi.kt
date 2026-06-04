@@ -13,7 +13,6 @@ import kotlinx.serialization.json.Json
 
 @Serializable data class IdTagBody(val idTag: String, val status: String)
 @Serializable data class AcceptedBody(val accepted: Boolean)
-@Serializable data class SettingsBody(val maxCurrentA: Int, val emsAutoControl: Boolean)
 @Serializable data class StartBody(val idTag: String, val connectorId: Int? = null)
 @Serializable data class StopBody(val transactionId: Int)
 @Serializable data class ResetBody(val type: String = "Soft")
@@ -52,17 +51,6 @@ fun Application.configureOcppWebUi(service: OcppService) {
             }
             delete("/idtags/{idTag}") {
                 service.deleteIdTag(call.parameters["idTag"]!!)
-                call.respond(HttpStatusCode.OK)
-            }
-
-            get("/settings/{id}") {
-                val s = service.getChargerSettings(call.parameters["id"]!!)
-                if (s == null) call.respond(HttpStatusCode.NotFound)
-                else call.respondText(json.encodeToString(s), ContentType.Application.Json)
-            }
-            post("/settings/{id}") {
-                val body = call.receive<SettingsBody>()
-                service.putChargerSettings(call.parameters["id"]!!, body.maxCurrentA, body.emsAutoControl)
                 call.respond(HttpStatusCode.OK)
             }
 

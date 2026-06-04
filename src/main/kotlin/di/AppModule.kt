@@ -10,7 +10,6 @@ import io.konektis.ems.SimpleGridCompensationStrategy
 import io.konektis.ocpp.OcppService
 import io.konektis.ocpp.db.ChargePointStore
 import io.konektis.ocpp.db.ChargerControlStore
-import io.konektis.ocpp.db.ChargerSettingsStore
 import io.konektis.ocpp.db.IdTagStore
 import io.konektis.ocpp.db.SqlChargerControlStore
 import io.konektis.ocpp.db.TransactionStore
@@ -70,6 +69,6 @@ interface AppModule {
     fun provideOcppService(config: Config, database: Database): OcppService =
         OcppService(
             ChargePointStore(database), IdTagStore(database),
-            ChargerSettingsStore(database), TransactionStore(database), config.ocpp,
+            TransactionStore(database), config.ocpp,
         ).also { it.initStores() }
 }

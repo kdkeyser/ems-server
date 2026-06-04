@@ -86,26 +86,6 @@ function createCard(id) {
 
   const connectors = document.createElement('div');
 
-  const settingsRow = document.createElement('div');
-  settingsRow.className = 'row';
-  settingsRow.style.marginTop = '8px';
-  const settingsLabel = document.createElement('span');
-  settingsLabel.className = 'muted';
-  const maxA = document.createElement('input');
-  maxA.style.width = '64px';
-  maxA.type = 'number';
-  maxA.min = '0';
-  const autoLabel = document.createElement('label');
-  const auto = document.createElement('input');
-  auto.type = 'checkbox';
-  autoLabel.append(auto, document.createTextNode(' EMS auto'));
-  settingsLabel.append(document.createTextNode('Max A '), maxA, document.createTextNode(' '), autoLabel);
-  const saveBtn = document.createElement('button');
-  saveBtn.textContent = 'Save';
-  saveBtn.dataset.cp = id;
-  saveBtn.addEventListener('click', () => saveSettings(id));
-  settingsRow.append(settingsLabel, saveBtn);
-
   const actionRow = document.createElement('div');
   actionRow.className = 'row';
   actionRow.style.marginTop = '8px';
@@ -147,9 +127,9 @@ function createCard(id) {
   clearBtn.addEventListener('click', () => clearProfile(id));
   controlRow.append(controlLabel, setCurrentBtn, clearBtn);
 
-  div.append(headRow, meta, connectors, settingsRow, actionRow, controlRow);
+  div.append(headRow, meta, connectors, actionRow, controlRow);
 
-  const entry = { card: div, refs: { scPill, prPill, meta, connectors, maxA, auto, ampsInput, connInput, stopBtn } };
+  const entry = { card: div, refs: { scPill, prPill, meta, connectors, ampsInput, connInput, stopBtn } };
   cards[id] = entry;
   return entry;
 }
@@ -194,7 +174,6 @@ function render(state) {
     if (!entry) {
       entry = createCard(c.chargePointId);
       cp.appendChild(entry.card);
-      loadSettings(c.chargePointId); // exactly once, at creation
     }
     updateCard(entry, c);
   });
@@ -219,28 +198,6 @@ function render(state) {
   } else if (empty) {
     empty.remove();
   }
-}
-
-async function loadSettings(id) {
-  const r = await api('/settings/' + id);
-  const entry = cards[id];
-  if (!entry) return;
-  const maxA = entry.refs.maxA, auto = entry.refs.auto;
-  if (r.ok) {
-    const s = await r.json();
-    if (document.activeElement !== maxA) maxA.value = s.maxCurrentA;
-    if (document.activeElement !== auto) auto.checked = s.emsAutoControl;
-  } else { // sensible defaults when none stored yet
-    if (document.activeElement !== maxA) maxA.value = 32;
-    if (document.activeElement !== auto) auto.checked = true;
-  }
-}
-async function saveSettings(id) {
-  const entry = cards[id];
-  if (!entry) return;
-  const maxCurrentA = parseInt(entry.refs.maxA.value, 10) || 0;
-  const emsAutoControl = entry.refs.auto.checked;
-  await api('/settings/' + id, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({maxCurrentA, emsAutoControl}) });
 }
 
 async function refreshAllowList() {

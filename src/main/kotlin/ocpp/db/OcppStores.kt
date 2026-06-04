@@ -112,36 +112,6 @@ class IdTagStore(private val db: Database) {
     }
 }
 
-@Serializable
-data class ChargerSettingsRecord(val chargePointId: String, val maxCurrentA: Int, val emsAutoControl: Boolean)
-
-class ChargerSettingsStore(private val db: Database) {
-    fun init() = transaction(db) { SchemaUtils.create(OcppChargerSettings) }
-
-    suspend fun get(id: String): ChargerSettingsRecord? = dbQuery(db) {
-        OcppChargerSettings.selectAll().where { OcppChargerSettings.chargePointId eq id }.singleOrNull()?.let {
-            ChargerSettingsRecord(it[OcppChargerSettings.chargePointId], it[OcppChargerSettings.maxCurrentA], it[OcppChargerSettings.emsAutoControl])
-        }
-    }
-
-    suspend fun put(id: String, maxCurrentA: Int, emsAutoControl: Boolean) = dbQuery(db) {
-        val exists = OcppChargerSettings.selectAll().where { OcppChargerSettings.chargePointId eq id }.any()
-        if (exists) {
-            OcppChargerSettings.update({ OcppChargerSettings.chargePointId eq id }) {
-                it[OcppChargerSettings.maxCurrentA] = maxCurrentA
-                it[OcppChargerSettings.emsAutoControl] = emsAutoControl
-            }
-        } else {
-            OcppChargerSettings.insert {
-                it[chargePointId] = id
-                it[OcppChargerSettings.maxCurrentA] = maxCurrentA
-                it[OcppChargerSettings.emsAutoControl] = emsAutoControl
-            }
-        }
-        Unit
-    }
-}
-
 data class ChargerControlRecord(val chargePointId: String, val mode: String, val fixedAmps: Int, val charging: Boolean)
 
 /** Persisted per-charger control intent. An interface so EnergyManager unit tests can fake it. */

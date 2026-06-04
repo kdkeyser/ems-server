@@ -21,13 +21,6 @@ object OcppIdTags : Table("ocpp_id_tags") {
     override val primaryKey = PrimaryKey(idTag)
 }
 
-object OcppChargerSettings : Table("ocpp_charger_settings") {
-    val chargePointId = varchar("charge_point_id", 64)
-    val maxCurrentA = integer("max_current_a")
-    val emsAutoControl = bool("ems_auto_control").default(true)
-    override val primaryKey = PrimaryKey(chargePointId)
-}
-
 object OcppChargerControl : Table("ocpp_charger_control") {
     val chargePointId = varchar("charge_point_id", 64)
     val mode = varchar("mode", 16)        // "SOLAR" | "FIXED"

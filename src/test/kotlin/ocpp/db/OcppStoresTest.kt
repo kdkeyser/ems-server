@@ -40,18 +40,6 @@ class OcppStoresTest {
     }
 
     @Test
-    fun chargerSettingsRoundTrip() = runTest {
-        val db = freshTestDb()
-        val store = ChargerSettingsStore(db)
-        store.init()
-
-        store.put("CP01", maxCurrentA = 16, emsAutoControl = true)
-        val s = store.get("CP01")!!
-        assertEquals(16, s.maxCurrentA)
-        assertTrue(s.emsAutoControl)
-    }
-
-    @Test
     fun transactionInsertAndList() = runTest {
         val db = freshTestDb()
         val store = TransactionStore(db)
@@ -109,24 +97,6 @@ class OcppStoresTest {
         store.put("TAG1", "Accepted")
         store.delete("TAG1")
         assertNull(store.get("TAG1"))
-    }
-
-    @Test
-    fun chargerSettingsPutOverwrites() = runTest {
-        val db = freshTestDb()
-        val store = ChargerSettingsStore(db)
-        store.init()
-
-        store.put("CP01", maxCurrentA = 16, emsAutoControl = true)
-        val initial = store.get("CP01")!!
-        assertEquals(16, initial.maxCurrentA)
-        assertTrue(initial.emsAutoControl)
-
-        // Overwrite — update branch
-        store.put("CP01", maxCurrentA = 10, emsAutoControl = false)
-        val updated = store.get("CP01")!!
-        assertEquals(10, updated.maxCurrentA)
-        assertFalse(updated.emsAutoControl)
     }
 
     @Test

@@ -53,15 +53,8 @@ class OcppCharger(
             logger.debug { "OcppCharger $chargePointId: SmartCharging unsupported, skipping setMaxChargerPower" }
             return
         }
-        val settings = service.getChargerSettings(chargePointId)
-        if (settings != null && !settings.emsAutoControl) {
-            logger.debug { "OcppCharger $chargePointId: EMS auto-control disabled in settings, skipping" }
-            return
-        }
-        // Send in amps for broadest charger compatibility (same 230V convention as Webasto),
-        // clamped to the configured max current when settings exist.
-        var amps = power.value / 230
-        if (settings != null && amps > settings.maxCurrentA) amps = settings.maxCurrentA
+        // Send in amps (230V convention). The EMS has already clamped to the config max / fixed level.
+        val amps = power.value / 230
         val ok = service.setChargingProfile(chargePointId, connectorId, amps.toDouble(), ChargingRateUnitType.A)
         if (!ok) logger.warn { "OcppCharger $chargePointId: SetChargingProfile($amps A) not accepted" }
     }

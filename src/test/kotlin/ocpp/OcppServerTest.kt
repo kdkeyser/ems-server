@@ -26,7 +26,7 @@ private fun Application.configureTestOcppServer() {
     val db = io.konektis.ocpp.freshTestDb()
     val cfg = OcppConfig(enabled = true, heartbeatInterval = 300, connectionTimeout = 60,
         callTimeoutSeconds = 1, autoProbeOnBoot = false)
-    val service = OcppService(ChargePointStore(db), IdTagStore(db), ChargerSettingsStore(db), TransactionStore(db), cfg)
+    val service = OcppService(ChargePointStore(db), IdTagStore(db), TransactionStore(db), cfg)
         .also { it.initStores() }
     configureOcppServer(service)
 }

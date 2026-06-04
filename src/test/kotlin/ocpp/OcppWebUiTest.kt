@@ -20,7 +20,7 @@ class OcppWebUiTest {
         install(WebSockets) { pingPeriod = 30.seconds; timeout = 60.seconds }
         install(ContentNegotiation) { json() }
         val db = freshTestDb()
-        val svc = OcppService(ChargePointStore(db), IdTagStore(db), ChargerSettingsStore(db), TransactionStore(db),
+        val svc = OcppService(ChargePointStore(db), IdTagStore(db), TransactionStore(db),
             OcppConfig(true, 300, 60, autoProbeOnBoot = false)).also { it.initStores() }
         configureOcppWebUi(svc)
         return svc

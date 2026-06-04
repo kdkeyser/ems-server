@@ -81,6 +81,7 @@ class Main : Klogging {
                     delay(5000)
                 }
             }
+            energyManager.loadChargerControl()
             launch { energyManager.run() }
             launch {
                 val server = embeddedServer(Netty, port = 8080) {

@@ -11,16 +11,14 @@ import kotlin.random.Random
 // These names MUST stay in sync with the app's WsMessage.kt.
 
 @Serializable
-sealed class ChargingState {
-    @Serializable @SerialName("NotCharging")
-    class NotCharging() : ChargingState()
+enum class ChargerMode { SOLAR, FIXED }
 
-    @Serializable @SerialName("ChargingWithExcessPower")
-    class ChargingWithExcessPower() : ChargingState()
-
-    @Serializable @SerialName("ChargingWithMaxPower")
-    data class ChargingWithMaxPower(val maxPower: UInt) : ChargingState()
-}
+@Serializable
+data class ChargerControl(
+    val mode: ChargerMode = ChargerMode.SOLAR,
+    val fixedAmps: Int = 16,
+    val charging: Boolean = true,
+)
 
 @Serializable
 enum class Devices {
@@ -49,15 +47,15 @@ sealed class Message {
     data class Unauthorized(val username: String) : Message()
     @Serializable @SerialName("ModeUpdate")
     data class ModeUpdate(val mode: ManagerMode) : Message()
-    @Serializable @SerialName("ChargingStateUpdate")
-    data class ChargingStateUpdate(val chargingState: ChargingState) : Message()
+    @Serializable @SerialName("ChargerControlUpdate")
+    data class ChargerControlUpdate(val control: ChargerControl) : Message()
 }
 
 @Serializable
 sealed class ClientMessage {
     // Messages from client
     @Serializable @SerialName("SetCharging")
-    data class SetCharging(val chargingState: ChargingState) : ClientMessage()
+    data class SetCharging(val control: ChargerControl) : ClientMessage()
     @Serializable @SerialName("Authenticate")
     data class Authenticate(val username : String, val password: String) : ClientMessage()
     @Serializable @SerialName("SetMode")

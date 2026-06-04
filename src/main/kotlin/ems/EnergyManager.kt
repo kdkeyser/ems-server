@@ -1,13 +1,15 @@
 package io.konektis.ems
 
 import io.klogging.Klogging
-import io.konektis.ChargingState
+import io.konektis.ChargerControl
+import io.konektis.ChargerMode
 import io.konektis.ManagerMode
 import io.konektis.config.Config
 import io.konektis.devices.Watt
 import io.konektis.devices.World
 import io.konektis.devices.charger.ChargerConnection
 import io.konektis.devices.smartConsumers.ConsumeMode
+import io.konektis.ocpp.db.ChargerControlStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.time.delay
 import java.time.Duration
@@ -19,7 +21,8 @@ enum class Mode {
 class EnergyManager(
     private val world: World,
     private val config: Config,
-    private val strategy: Strategy
+    private val strategy: Strategy,
+    private val chargerControlStore: ChargerControlStore,
 ) : Klogging {
 
     // setMode() is called from the WebSocket coroutine; tick() reads mode from the run() loop.
@@ -32,13 +35,33 @@ class EnergyManager(
     val emsStateFlow = MutableStateFlow(EMSState(null, null, null, null, null, null, null))
     val modeFlow = MutableStateFlow(ManagerMode.AUTO)
 
-    val chargingStateFlow = MutableStateFlow<ChargingState>(ChargingState.ChargingWithExcessPower())
+    private val chargerKey: String? =
+        config.devices.charger.firstOrNull()?.let { it.chargePointId ?: it.name }
 
-    // Single source of truth: the current control intent is whatever the flow holds.
-    val chargerControl: ChargingState get() = chargingStateFlow.value
+    private fun defaultControl() =
+        ChargerControl(ChargerMode.SOLAR, config.devices.charger.firstOrNull()?.chargingCurrent?.max?.toInt() ?: 16, true)
 
-    fun setCharging(state: ChargingState) {
-        chargingStateFlow.value = state
+    val chargerControlFlow = MutableStateFlow(defaultControl())
+    val chargerControl: ChargerControl get() = chargerControlFlow.value
+
+    /** Load the persisted control on startup (call once before run()). */
+    suspend fun loadChargerControl() {
+        chargerControlStore.init()
+        val key = chargerKey ?: return
+        val rec = chargerControlStore.get(key) ?: return
+        chargerControlFlow.value = ChargerControl(
+            mode = runCatching { ChargerMode.valueOf(rec.mode) }.getOrDefault(ChargerMode.SOLAR),
+            fixedAmps = rec.fixedAmps,
+            charging = rec.charging,
+        )
+    }
+
+    suspend fun setCharging(control: ChargerControl) {
+        chargerControlFlow.value = control
+        val key = chargerKey ?: return
+        runCatchingLog("persist charger control") {
+            chargerControlStore.put(key, control.mode.name, control.fixedAmps, control.charging)
+        }
     }
 
     fun setMode(newMode: Mode) {
@@ -67,14 +90,12 @@ class EnergyManager(
         // No car connected -> force the charger off regardless of intent (don't push surplus to an
         // empty charger; keeps the battery's deadbeat projection exact). Connected/Charging/Unknown
         // (incl. non-OCPP chargers that report Unknown) -> use the intent-driven override.
-        val override = configMaxAmps()?.let { maxAmps ->
-            if (emsState.chargerConnection == ChargerConnection.NotConnected) 0
-            else chargerOverrideAmps(maxAmps)
-        }
+        val connected = emsState.chargerConnection != ChargerConnection.NotConnected
+        val override = configMaxAmps()?.let { effectiveChargerAmps(it, connected) }
 
         if (mode != Mode.AUTO) {
             // MANUAL: independent charger control (battery/heat pump already released on transition).
-            applyChargerInManual(emsState, override)
+            applyChargerInManual(override)
             return
         }
 
@@ -88,7 +109,7 @@ class EnergyManager(
                         runCatchingLog("release battery") { battery.releaseToInverter() }
                     }
                 }
-                // Stop/Fixed are still enforced without surplus data; ExcessPower (null) is left as-is.
+                // Stop/Fixed are still enforced without surplus data; solar surplus (null) is left as-is.
                 override?.let { applyChargerAmps(it) }
             }
             // Tier 1 — full data: run the surplus cascade with the charger override folded in.
@@ -115,7 +136,7 @@ class EnergyManager(
                 world.batteries.values.forEach { battery ->
                     runCatchingLog("set battery") { battery.setChargingPower(target) }
                 }
-                // Stop/Fixed enforced; default ExcessPower (null) leaves the charger uncommanded.
+                // Stop/Fixed enforced; solar surplus (null) leaves the charger uncommanded.
                 override?.let { applyChargerAmps(it) }
             }
         }
@@ -156,11 +177,18 @@ class EnergyManager(
     private fun configMaxAmps(): Int? =
         config.devices.charger.firstOrNull()?.chargingCurrent?.max?.toInt()
 
-    /** Forced charger amps for Stop (0) / Fixed (clamped); null for ExcessPower (use surplus). */
-    private fun chargerOverrideAmps(maxAmps: Int): Int? = when (val c = chargerControl) {
-        is ChargingState.NotCharging -> 0
-        is ChargingState.ChargingWithMaxPower -> (c.maxPower.toInt() / 230).coerceIn(0, maxAmps)
-        is ChargingState.ChargingWithExcessPower -> null
+    /**
+     * Effective forced charger amps, or null to let the strategy compute the solar surplus.
+     * No car or stopped -> 0. Solar surplus only applies in AUTO; MANUAL auto-reverts to Fixed.
+     */
+    private fun effectiveChargerAmps(maxAmps: Int, connected: Boolean): Int? {
+        val c = chargerControl
+        if (!connected || !c.charging) return 0
+        val chargerMode = if (mode == Mode.AUTO) c.mode else ChargerMode.FIXED
+        return when (chargerMode) {
+            ChargerMode.FIXED -> c.fixedAmps.coerceIn(0, maxAmps)
+            ChargerMode.SOLAR -> null
+        }
     }
 
     private suspend fun applyChargerAmps(amps: Int) {
@@ -169,13 +197,9 @@ class EnergyManager(
         }
     }
 
-    /** MANUAL: battery/heat pump are released; still drive the charger per its intent. */
-    private suspend fun applyChargerInManual(emsState: EMSState, override: Int?) {
-        val amps = override ?: run {
-            val snapshot = buildWorldSnapshot(emsState) ?: return
-            strategy.decide(snapshot.copy(chargerOverrideAmps = null)).chargerMaxAmps ?: return
-        }
-        applyChargerAmps(amps)
+    /** MANUAL: battery/heat pump are released; still drive the charger per its (Fixed) intent. */
+    private suspend fun applyChargerInManual(override: Int?) {
+        applyChargerAmps(override ?: 0)
     }
 
     private fun buildWorldSnapshot(emsState: EMSState): WorldSnapshot? {

@@ -9,8 +9,10 @@ import io.konektis.ems.SurplusPriorityStrategy
 import io.konektis.ems.SimpleGridCompensationStrategy
 import io.konektis.ocpp.OcppService
 import io.konektis.ocpp.db.ChargePointStore
+import io.konektis.ocpp.db.ChargerControlStore
 import io.konektis.ocpp.db.ChargerSettingsStore
 import io.konektis.ocpp.db.IdTagStore
+import io.konektis.ocpp.db.SqlChargerControlStore
 import io.konektis.ocpp.db.TransactionStore
 import io.konektis.ocpp.db.openDatabase
 import io.ktor.client.HttpClient
@@ -50,9 +52,13 @@ interface AppModule {
     @Provides
     fun provideStrategy(): Strategy = SurplusPriorityStrategy()
 
+    @ApplicationScope
     @Provides
-    fun provideEnergyManager(world: World, config: Config, strategy: Strategy): EnergyManager =
-        EnergyManager(world, config, strategy)
+    fun provideChargerControlStore(database: Database): ChargerControlStore = SqlChargerControlStore(database)
+
+    @Provides
+    fun provideEnergyManager(world: World, config: Config, strategy: Strategy, chargerControlStore: ChargerControlStore): EnergyManager =
+        EnergyManager(world, config, strategy, chargerControlStore)
 
     @ApplicationScope
     @Provides

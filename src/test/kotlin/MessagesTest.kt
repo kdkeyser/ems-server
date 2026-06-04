@@ -6,11 +6,11 @@ import kotlin.test.assertTrue
 
 class MessagesTest {
     @Test
-    fun `ChargingStateUpdate uses the agreed discriminator and encodes the state`() {
+    fun `ChargerControlUpdate uses the agreed discriminator and encodes the control`() {
         val json = Json.encodeToString(
-            Message.ChargingStateUpdate(ChargingState.ChargingWithMaxPower(7400u)) as Message
+            Message.ChargerControlUpdate(ChargerControl(ChargerMode.FIXED, 16, true)) as Message
         )
-        assertTrue(json.contains("\"type\":\"ChargingStateUpdate\""), "unexpected discriminator: $json")
-        assertTrue(json.contains("\"type\":\"ChargingWithMaxPower\""), "missing nested state: $json")
+        assertTrue(json.contains("\"type\":\"ChargerControlUpdate\""), "unexpected discriminator: $json")
+        assertTrue(json.contains("\"mode\":\"FIXED\""), "missing mode: $json")
     }
 }

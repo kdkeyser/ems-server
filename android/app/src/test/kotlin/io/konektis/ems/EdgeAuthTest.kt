@@ -9,17 +9,15 @@ import kotlin.test.assertTrue
 class EdgeAuthTest {
 
     @Test
-    fun `both values set yields both CF headers`() {
-        val h = edgeAuthHeaders(Settings(cfAccessClientId = "id", cfAccessClientSecret = "sec"))
-        assertEquals("id", h["CF-Access-Client-Id"])
-        assertEquals("sec", h["CF-Access-Client-Secret"])
-        assertEquals(2, h.size)
+    fun `edge key set yields the edge header`() {
+        val h = edgeAuthHeaders(Settings(edgeKey = "sec"))
+        assertEquals("sec", h["X-EMS-Edge-Key"])
+        assertEquals(1, h.size)
     }
 
     @Test
-    fun `missing either value yields no headers`() {
-        assertTrue(edgeAuthHeaders(Settings(cfAccessClientId = "id")).isEmpty())
-        assertTrue(edgeAuthHeaders(Settings(cfAccessClientSecret = "sec")).isEmpty())
+    fun `blank edge key yields no headers`() {
+        assertTrue(edgeAuthHeaders(Settings(edgeKey = "")).isEmpty())
         assertTrue(edgeAuthHeaders(Settings()).isEmpty())
     }
 }

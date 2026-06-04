@@ -37,8 +37,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
     var username  by rememberSaveable(saved.username)  { mutableStateOf(saved.username) }
     var password  by rememberSaveable(saved.password)  { mutableStateOf(saved.password) }
     var useTls         by rememberSaveable(saved.useTls)              { mutableStateOf(saved.useTls) }
-    var cfId           by rememberSaveable(saved.cfAccessClientId)    { mutableStateOf(saved.cfAccessClientId) }
-    var cfSecret       by rememberSaveable(saved.cfAccessClientSecret){ mutableStateOf(saved.cfAccessClientSecret) }
+    var edgeKey        by rememberSaveable(saved.edgeKey)             { mutableStateOf(saved.edgeKey) }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -74,15 +73,9 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
-                value = cfId,
-                onValueChange = { cfId = it },
-                label = { Text("CF Access Client ID") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = cfSecret,
-                onValueChange = { cfSecret = it },
-                label = { Text("CF Access Client Secret") },
+                value = edgeKey,
+                onValueChange = { edgeKey = it },
+                label = { Text("Edge key (X-EMS-Edge-Key)") },
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -102,8 +95,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
                             username = username.trim(),
                             password = password,
                             useTls = useTls,
-                            cfAccessClientId = cfId.trim(),
-                            cfAccessClientSecret = cfSecret.trim()
+                            edgeKey = edgeKey.trim()
                         )
                     )
                     onBack()

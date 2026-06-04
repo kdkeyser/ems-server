@@ -71,33 +71,45 @@ In the tunnel's **Public Hostname** config, add (in order):
 Only `/ws` and `/status-ws` reach the server; every other path returns 404, so the admin pages and
 charger endpoint are never exposed.
 
-## 6. Access service token (edge auth)
+## 6. Edge auth — WAF custom rule (shared-secret header)
 
-**Zero Trust → Access → Service Auth → Create Service Token**; copy the **Client ID** and
-**Client Secret** (shown once).
+`/status-ws` is app-unauthenticated (the local `status.html` needs no creds), so we gate the public
+hostname at the edge with a shared secret in a header. Cloudflare **Access** would also work but its
+dashboard now requires a payment method on file; the Free-plan **WAF custom rules** (5 included) do
+the same job — a secret over TLS — without one.
 
-**Zero Trust → Access → Applications → Add an application → Self-hosted**:
+Generate a strong secret:
 
-- Application domain: `ems.kenas.be`, path `ws`. Add a second application for path
-  `status-ws` (or one app whose path matches both).
-- Policy: action **Service Auth**, include the **service token** created above.
+```bash
+openssl rand -hex 32
+```
 
-Requests without valid `CF-Access-Client-Id`/`CF-Access-Client-Secret` headers are rejected at the
-edge. Save the Client ID + Secret for the app's Settings.
+**Security → Security rules → Custom rules** (older layouts: **Security → WAF → Custom rules**) →
+**Create rule**. Use the expression editor (header names must be lowercase):
+
+```
+(http.host eq "ems.kenas.be" and not any(http.request.headers["x-ems-edge-key"][*] eq "<SECRET>"))
+```
+
+Action: **Block**. The `not any(...)` form also blocks when the header is absent. This applies to
+both `/ws` and `/status-ws`, adding defense-in-depth to `/ws` on top of its app-layer auth. Save the
+secret for the app's Settings.
+
+> A neutral header (`x-ems-edge-key`) is used on purpose, rather than the `CF-Access-*` names, to
+> avoid any collision with Cloudflare's reserved `CF-*` namespace and any future header handling on
+> their end.
 
 ## 7. Validate end-to-end
 
 ```bash
-# with the service token -> expect 101 upgrade + StatusState JSON frames
-websocat -H "CF-Access-Client-Id: <id>" -H "CF-Access-Client-Secret: <secret>" \
-  "wss://ems.kenas.be/status-ws"
+# with the edge key -> expect 101 upgrade + StatusState JSON frames
+websocat -H "x-ems-edge-key: <secret>" "wss://ems.kenas.be/status-ws"
 
-# without it -> rejected by Access, no upgrade
+# without it (or a wrong value) -> blocked by the WAF (HTTP 403, no upgrade)
 websocat "wss://ems.kenas.be/status-ws"
 
-# /ws with token + correct creds: after the Authenticate frame, expect Authenticated + updates
-websocat -H "CF-Access-Client-Id: <id>" -H "CF-Access-Client-Secret: <secret>" \
-  "wss://ems.kenas.be/ws"
+# /ws with the key + correct creds: after the Authenticate frame, expect Authenticated + updates
+websocat -H "x-ems-edge-key: <secret>" "wss://ems.kenas.be/ws"
 # then type: {"type":"Authenticate","username":"<cfg user>","password":"<cfg pass>"}
 
 # not exposed
@@ -109,13 +121,13 @@ the charger still connects to `ws://<NAS-LAN-IP>:8080/ocpp/CP01`.
 
 ## 8. Configure the app
 
-App **Settings**: server `ems.kenas.be`, **Use TLS on**, **CF Access Client ID** + **CF
-Access Client Secret** from step 6, username/password = the `websocket` creds from
-`deploy/config.yaml`.
+App **Settings**: server `ems.kenas.be`, **Use TLS on**, **Edge key** = the `<SECRET>` from step 6,
+username/password = the `websocket` creds from `deploy/config.yaml`.
 
 ## Operations
 
-- **Rotate the service token:** create a new one in Access, update the app, delete the old token.
+- **Rotate the edge key:** generate a new secret, update the WAF rule's expression, then update the
+  app's **Edge key**.
 - **Rotate websocket creds:** edit `deploy/config.yaml`, `docker compose restart ems-server`,
   update the app.
 - **Update the server:** rebuild on the build machine (`deploy/build-podman.sh`), copy the new

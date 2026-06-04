@@ -16,8 +16,8 @@ it over an outbound-only connection to the NAS — nothing is exposed on your ro
 
 ```
   Phone app            Cloudflare edge                NAS (home LAN 192.168.129.0/24)
- (anywhere)  ──wss──▶  TLS + Access service token ──▶ ┌──────── docker bridge ─────────┐
-  + CF-Access-*        (proxies WebSockets)  tunnel   │ cloudflared ──▶ ems-server:8080 │
+ (anywhere)  ──wss──▶  TLS + WAF edge-key rule  ────▶ ┌──────── docker bridge ─────────┐
+  + X-EMS-Edge-Key     (proxies WebSockets)  tunnel   │ cloudflared ──▶ ems-server:8080 │
                                              (outbound)│                  │ (EMS server) │
                                                        └──────────────────┼─────────────┘
    LAN clients ──────────────────────────────────────────────────────────┤ :8080 published
@@ -25,8 +25,8 @@ it over an outbound-only connection to the NAS — nothing is exposed on your ro
    solar / battery / heat pump / P1 meter  ◀── Modbus/HTTP (outbound) ─────┘
 ```
 
-- **Remote traffic:** `wss://ems.kenas.be` → Cloudflare edge (terminates TLS, checks the
-  Access service token) → tunnel → `cloudflared` → `ems-server:8080`.
+- **Remote traffic:** `wss://ems.kenas.be` → Cloudflare edge (terminates TLS, the WAF rule checks
+  the `X-EMS-Edge-Key` secret) → tunnel → `cloudflared` → `ems-server:8080`.
 - **LAN traffic** (charger, admin pages): straight to the NAS's published port 8080, unchanged.
 - **Devices:** the EMS server reaches them outbound from the bridge via the NAS.
 
@@ -46,9 +46,9 @@ Each step links to the full runbook. Do them in order.
 | 2 | **Config + tunnel** — fill `deploy/config.yaml`; create a token-managed tunnel; `TUNNEL_TOKEN` → `.env`. | [§2](remote-access-cloudflare-runbook.md#2-prepare-the-config), [§3](remote-access-cloudflare-runbook.md#3-create-the-tunnel-token-managed) |
 | 3 | **Build + deploy** — `deploy/build-podman.sh`, `scp`, `docker load`, `docker compose up -d`. | [§4](remote-access-cloudflare-runbook.md#4-build-ship-run) |
 | 4 | **Publish + scope** — public hostname routes only `/ws` + `/status-ws`; catch-all 404. | [§5](remote-access-cloudflare-runbook.md#5-public-hostname--path-scoping) |
-| 5 | **Edge auth** — Access self-hosted app + Service Auth policy + service token. | [§6](remote-access-cloudflare-runbook.md#6-access-service-token-edge-auth) |
-| 6 | **Validate** — `websocat` with the CF headers → expect `101` + frames. | [§7](remote-access-cloudflare-runbook.md#7-validate-end-to-end) |
-| 7 | **Configure the app** — server host, TLS on, CF Client ID/Secret, creds. | [§8](remote-access-cloudflare-runbook.md#8-configure-the-app) |
+| 5 | **Edge auth** — WAF custom rule requiring the `x-ems-edge-key` shared secret. | [§6](remote-access-cloudflare-runbook.md#6-edge-auth--waf-custom-rule-shared-secret-header) |
+| 6 | **Validate** — `websocat -H "x-ems-edge-key: …"` → expect `101` + frames. | [§7](remote-access-cloudflare-runbook.md#7-validate-end-to-end) |
+| 7 | **Configure the app** — server host, TLS on, edge key, creds. | [§8](remote-access-cloudflare-runbook.md#8-configure-the-app) |
 
 ## App configuration
 
@@ -58,22 +58,22 @@ In the app's **Settings**:
 |-------|----------------------------|----------------------|
 | Server address | `ems.kenas.be` | `<NAS-LAN-IP>:8080` (emulator: `10.0.2.2:8080`) |
 | Use TLS (wss) | **On** | Off |
-| CF Access Client ID | from the Access service token | leave blank |
-| CF Access Client Secret | from the Access service token | leave blank |
+| Edge key | the WAF shared secret (`x-ems-edge-key`) | leave blank |
 | Username / Password | the `websocket` creds from `deploy/config.yaml` | same |
 
-The CF values are sent as `CF-Access-Client-Id` / `CF-Access-Client-Secret` on both WebSocket
-endpoints (edge auth). The username/password go in the app-layer `Authenticate` frame on `/ws` only.
+The edge key is sent as the `X-EMS-Edge-Key` header on both WebSocket endpoints, where the WAF rule
+checks it. The username/password go in the app-layer `Authenticate` frame on `/ws` only.
 
 ## Security model
 
 - **No open ports / no fixed IP** — `cloudflared` only makes outbound connections.
-- **Two auth layers:** Cloudflare Access rejects anything without a valid service token before it
-  reaches the NAS; `/ws` additionally requires the app-layer username/password.
+- **Two auth layers:** a Cloudflare WAF custom rule blocks anything without the correct
+  `X-EMS-Edge-Key` secret before it reaches the NAS; `/ws` additionally requires the app-layer
+  username/password.
 - **Least exposure:** only `/ws` + `/status-ws` are routed; every other path returns 404.
   `/ocpp/{id}`, `/ocpp-ui`, `/status`, `/users` stay LAN-only.
 - **`/status-ws`** is app-unauthenticated so the local `status.html` works without creds; remotely
-  it's gated by the Access service token.
+  it's gated by the WAF edge-key rule.
 - Replace the template's `CHANGE_ME_*` websocket creds before exposing anything.
 
 ## Where things live
@@ -92,6 +92,6 @@ endpoints (edge auth). The username/password go in the app-layer `Authenticate` 
 | `docker compose up` fails to publish 8080 | Port 8080 already in use — `ss -tlnp \| grep 8080` should be empty. |
 | Server logs can't read config | `deploy/config.yaml` not world-readable — `chmod 644`. |
 | Tunnel not **Healthy** | Bad `TUNNEL_TOKEN`, or `cloudflared` can't reach the edge — `docker compose logs cloudflared`. |
-| `wss://` returns 403 / login redirect | Missing/invalid CF Access service token headers. |
+| `wss://` returns 403 | Missing/wrong `X-EMS-Edge-Key` — must match the WAF rule's secret. |
 | `/ws` connects then closes | Wrong app username/password. |
 | Remote path returns 404 | Public-hostname path scoping doesn't include the path, or hits the catch-all. |

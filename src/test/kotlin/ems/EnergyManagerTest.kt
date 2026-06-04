@@ -70,14 +70,14 @@ class EnergyManagerTest {
 
     private fun manager(world: World) = EnergyManager(world, config(), SurplusPriorityStrategy())
 
-    @Test fun `tier1 full data runs cascade and sets battery remainder`() = runTest {
+    @Test fun `tier1 full data runs cascade and balances the measured grid`() = runTest {
         val bat = battery(0)
-        // grid -3000 exporting, charger 0, heat pump 0 → available 3000 → charger 13A (2990W).
-        // projectedGrid = -3000 + 2990 = -10W, within the 50W deadband → battery holds at 0W.
+        // grid -3000 exporting, charger 0, heat pump 0 -> charger gets 13A (2990W).
+        // Battery balances the MEASURED grid: target = 0 - (-3000) = +3000W.
         val world = World(grid(-3000), mapOf("c" to charger(0)), emptyMap(),
             mapOf("h" to heatpump(0)), mapOf("b" to bat))
         manager(world).tick()
-        coVerify { bat.setChargingPower(Watt(0)) }
+        coVerify { bat.setChargingPower(Watt(3000)) }
     }
 
     @Test fun `tier2 missing heatpump still balances battery on grid`() = runTest {

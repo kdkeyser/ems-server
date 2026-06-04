@@ -57,12 +57,11 @@ class SurplusPriorityStrategy(
                 }
             }
         }
-        val chargerConsumption = chargerAmps * 230
-
-        // Battery soaks up whatever imbalance the charger didn't.
-        // projectedGrid = the grid we'd see once the new charger setpoint lands, before the battery moves.
-        val projectedGrid = snapshot.gridPower.value + chargerConsumption - snapshot.chargerPower.value
-        val batteryTarget = batteryTarget(snapshot.batteryPower.value, projectedGrid)
+        // Battery balances the MEASURED grid, not the charger setpoint: the charger's real draw —
+        // whatever the car actually takes — already shows up in gridPower. Feeding the commanded
+        // setpoint forward instead parked the grid in steady-state export whenever the car drew less
+        // than commanded (e.g. car full). The battery's own-power deadbeat (gain 1) is unchanged.
+        val batteryTarget = batteryTarget(snapshot.batteryPower.value, snapshot.gridPower.value)
 
         return ControlDecisions(
             chargerMaxAmps = chargerAmps,

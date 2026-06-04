@@ -52,4 +52,12 @@ class WsMessageTest {
         assertTrue(json.contains("\"type\":\"ModeUpdate\""), "unexpected discriminator: $json")
         assertEquals(msg, Json.decodeFromString<Message>(json))
     }
+
+    @Test
+    fun `ChargingStateUpdate round-trips and uses the agreed discriminator`() {
+        val msg = Message.ChargingStateUpdate(ChargingState.ChargingWithExcessPower)
+        val json = Json.encodeToString<Message>(msg)
+        assertTrue(json.contains("\"type\":\"ChargingStateUpdate\""), "unexpected discriminator: $json")
+        assertEquals(msg, Json.decodeFromString<Message>(json))
+    }
 }

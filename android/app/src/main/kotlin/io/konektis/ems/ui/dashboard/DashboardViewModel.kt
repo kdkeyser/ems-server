@@ -18,6 +18,7 @@ class DashboardViewModel(
     statusFlow: Flow<StatusState>,
     val controlState: StateFlow<ControlState>,
     val mode: StateFlow<ManagerMode?> = MutableStateFlow(null),
+    val chargingState: StateFlow<ChargingState?> = MutableStateFlow(null),
     private val sendCommand: suspend (ClientMessage) -> Unit
 ) : ViewModel() {
 

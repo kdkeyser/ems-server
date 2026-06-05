@@ -41,10 +41,22 @@ echo "==> Copying $TARBALL -> $NAS_HOST:$REMOTE_DIR/"
 scp "${MUX[@]}" -P "$SSH_PORT" -O "$TARBALL" "$NAS_HOST:$REMOTE_DIR/$TARBALL"
 
 echo "==> Loading image + restarting the stack on the NAS"
-# Unquoted heredoc: $REMOTE_DIR / $TARBALL are expanded locally so the paths stay defined
-# in one place above; nothing else in the remote script uses '$'.
-ssh "${MUX[@]}" -p "$SSH_PORT" "$NAS_HOST" "bash -s" <<REMOTE
+# Quoted heredoc (no local expansion); REMOTE_DIR/TARBALL are passed as remote env vars so the
+# remote script can use them without escaping, and remote-side $PATH stays literal. '-ls' runs a
+# login shell.
+ssh "${MUX[@]}" -p "$SSH_PORT" "$NAS_HOST" \
+    "REMOTE_DIR='$REMOTE_DIR' TARBALL='$TARBALL' bash -ls" <<'REMOTE'
 set -euo pipefail
+
+# A non-interactive SSH session starts with a minimal PATH that often omits docker (it works when
+# you log in by hand because the login profile sets PATH). The login shell (-ls) picks that up;
+# also fold in the usual NAS install dirs as a fallback, then fail loudly if docker is still gone.
+for d in /usr/local/bin /usr/local/sbin /opt/bin /opt/sbin /usr/bin /usr/sbin; do
+    case ":$PATH:" in *":$d:"*) ;; *) [ -d "$d" ] && PATH="$PATH:$d" ;; esac
+done
+export PATH
+command -v docker >/dev/null 2>&1 || { echo "error: docker not found on the NAS. PATH=$PATH" >&2; exit 127; }
+
 cd "$REMOTE_DIR"
 
 # Load the freshly-built images from the archive (replaces ems-server:latest in place).
@@ -53,7 +65,7 @@ docker load -i "$TARBALL"
 # The NAS runs an old Docker, so it's docker-compose (v1), NOT "docker compose".
 # 'down' stops both services; the named ems-data volume (SQLite DB) survives because
 # we don't pass -v. 'up -d' recreates everything on the just-loaded image. TUNNEL_TOKEN
-# is read from the .env file already in $REMOTE_DIR.
+# is read from the .env file already in REMOTE_DIR.
 docker-compose down
 docker-compose up -d
 

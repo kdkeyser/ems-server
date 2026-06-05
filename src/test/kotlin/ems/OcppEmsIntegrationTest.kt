@@ -28,6 +28,7 @@ class OcppEmsIntegrationTest {
         every { svc.isPowerControlCapable("CP1") } returns true
         every { svc.latestPowerW("CP1", 1) } returns 0   // charger currently drawing 0 W
         every { svc.connectorStatus("CP1", 1) } returns null
+        every { svc.activeTransactionId("CP1", 1) } returns 99 // session already open: just throttle it
         coEvery { svc.setChargingProfile("CP1", 1, any(), any()) } returns true
         val charger = OcppCharger("CP1", 1, svc)
 

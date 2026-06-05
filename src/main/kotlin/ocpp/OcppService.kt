@@ -218,6 +218,10 @@ class OcppService(
     fun connectorStatus(chargePointId: String, connectorId: Int): ChargePointStatus? =
         sessions[chargePointId]?.connectors?.get(connectorId)?.status
 
+    /** Open transaction id on a connector, or null when no transaction is running. */
+    fun activeTransactionId(chargePointId: String, connectorId: Int): Int? =
+        sessions[chargePointId]?.connectors?.get(connectorId)?.currentTransactionId
+
     /** True when the charge point is connected and advertised SmartCharging support. */
     fun isPowerControlCapable(chargePointId: String): Boolean =
         sessions[chargePointId]?.smartChargingSupported == true

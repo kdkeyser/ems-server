@@ -17,8 +17,8 @@ class ChargerButtonTest {
 
     @Test fun `pending disables the button and shows progress label`() {
         val starting = chargerButtonState(sessionActive = false, pending = true)
-        assertEquals(ChargerButtonLabel.STARTING, starting.label); assertFalse(starting.enabled)
+        assertEquals(ChargerButtonLabel.STARTING, starting.label); assertFalse(starting.enabled); assertFalse(starting.stopStyle)
         val stopping = chargerButtonState(sessionActive = true, pending = false)
-        assertEquals(ChargerButtonLabel.STOPPING, stopping.label); assertFalse(stopping.enabled)
+        assertEquals(ChargerButtonLabel.STOPPING, stopping.label); assertFalse(stopping.enabled); assertTrue(stopping.stopStyle)
     }
 }

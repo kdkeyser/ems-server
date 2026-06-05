@@ -189,7 +189,7 @@ private fun ChargerControls(
             CircularProgressIndicator(
                 modifier = Modifier.size(18.dp),
                 strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.onPrimary,
+                color = if (btn.stopStyle) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary,
             )
             Spacer(Modifier.width(10.dp))
         }

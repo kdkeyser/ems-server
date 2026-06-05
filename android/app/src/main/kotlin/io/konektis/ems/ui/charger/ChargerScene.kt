@@ -27,9 +27,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.konektis.ems.R
 import io.konektis.ems.ui.components.EmsIcons
 import io.konektis.ems.ui.components.formatWatts
 import io.konektis.ems.ui.theme.LocalEmsColors
@@ -60,7 +62,7 @@ fun ChargerScene(spec: ChargerSceneSpec, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(EmsIcons.Charger, contentDescription = "Charger", tint = iconTint, modifier = Modifier.size(46.dp))
+        Icon(EmsIcons.Charger, contentDescription = stringResource(R.string.cd_charger), tint = iconTint, modifier = Modifier.size(46.dp))
         if (spec.showCar) {
             Cable(live = spec.charging)
             if (spec.charging) {
@@ -69,7 +71,7 @@ fun ChargerScene(spec: ChargerSceneSpec, modifier: Modifier = Modifier) {
             }
             Icon(
                 EmsIcons.Car,
-                contentDescription = "Car",
+                contentDescription = stringResource(R.string.cd_car),
                 tint = iconTint,
                 modifier = Modifier.size(46.dp).alpha(if (spec.carDimmed) 0.16f else 1f),
             )
@@ -100,7 +102,7 @@ private fun PulsingBolt() {
     )
     Icon(
         EmsIcons.Charging,
-        contentDescription = "Charging",
+        contentDescription = stringResource(R.string.cd_charging),
         tint = ChargingAmber,
         modifier = Modifier.size(24.dp).graphicsLayer { alpha = a; scaleX = s; scaleY = s },
     )
@@ -114,17 +116,17 @@ fun ChargerHero(uiState: ChargerUiState, chargerW: Int?, modifier: Modifier = Mo
     val online = uiState != ChargerUiState.NO_CAR &&
         (uiState != ChargerUiState.CONTROLS_FALLBACK || chargerW != null)
     val value = when {
-        uiState == ChargerUiState.NO_CAR -> "No car"
+        uiState == ChargerUiState.NO_CAR -> stringResource(R.string.charger_value_no_car)
         isCharging && chargerW != null -> formatWatts(chargerW)
-        isCharging -> "Charging"
+        isCharging -> stringResource(R.string.charger_charging)
         uiState == ChargerUiState.CONTROLS_FALLBACK && chargerW != null -> formatWatts(chargerW)
-        else -> "Idle"
+        else -> stringResource(R.string.charger_value_idle)
     }
     val statusText = when (uiState) {
-        ChargerUiState.NO_CAR -> "No car connected"
-        ChargerUiState.CHARGING -> "Charging"
-        ChargerUiState.CONNECTED_IDLE -> "Connected — not charging"
-        ChargerUiState.CONTROLS_FALLBACK -> if (chargerW != null) "Charger online" else "Status unavailable"
+        ChargerUiState.NO_CAR -> stringResource(R.string.charger_status_no_car)
+        ChargerUiState.CHARGING -> stringResource(R.string.charger_charging)
+        ChargerUiState.CONNECTED_IDLE -> stringResource(R.string.charger_status_connected_idle)
+        ChargerUiState.CONTROLS_FALLBACK -> if (chargerW != null) stringResource(R.string.charger_status_online) else stringResource(R.string.charger_status_unavailable)
     }
     Card(modifier = modifier.fillMaxWidth()) {
         Column(

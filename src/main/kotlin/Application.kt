@@ -101,7 +101,7 @@ fun Application.module(energyManager: EnergyManager, wsConfig: WebSocketConfig, 
     configureSockets(energyManager, wsConfig)
     configureStatusPage(statusFlow)
     configureOcppServer(ocppService)
-    configureOcppWebUi(ocppService)
+    configureOcppWebUi(ocppService, energyManager)
     configureDatabases(database)
     configureMonitoring()
     configureHTTP()

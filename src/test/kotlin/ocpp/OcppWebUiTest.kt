@@ -1,6 +1,8 @@
 package io.konektis.ocpp
 
 import io.konektis.config.OcppConfig
+import io.konektis.ems.EnergyManager
+import io.konektis.ems.SurplusPriorityStrategy
 import io.konektis.ocpp.db.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -10,6 +12,7 @@ import io.ktor.server.application.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.testing.*
 import io.ktor.server.websocket.*
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 import kotlin.time.Duration.Companion.seconds
@@ -22,7 +25,11 @@ class OcppWebUiTest {
         val db = freshTestDb()
         val svc = OcppService(ChargePointStore(db), IdTagStore(db), TransactionStore(db),
             OcppConfig(true, 300, 60, autoProbeOnBoot = false)).also { it.initStores() }
-        configureOcppWebUi(svc)
+        val em = EnergyManager(
+            io.konektis.devices.World(mockk(relaxed = true), emptyMap(), emptyMap(), emptyMap(), emptyMap()),
+            mockk(relaxed = true), SurplusPriorityStrategy(), SqlChargerControlStore(db),
+        )
+        configureOcppWebUi(svc, em)
         return svc
     }
 

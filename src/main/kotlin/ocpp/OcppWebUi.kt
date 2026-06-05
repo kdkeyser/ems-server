@@ -1,5 +1,8 @@
 package io.konektis.ocpp
 
+import io.konektis.ChargerControl
+import io.konektis.ChargerMode
+import io.konektis.ems.EnergyManager
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -11,6 +14,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+@Serializable data class ChargerControlBody(val mode: String, val fixedAmps: Int, val charging: Boolean)
 @Serializable data class IdTagBody(val idTag: String, val status: String)
 @Serializable data class AcceptedBody(val accepted: Boolean)
 @Serializable data class StartBody(val idTag: String, val connectorId: Int? = null)
@@ -19,7 +23,7 @@ import kotlinx.serialization.json.Json
 @Serializable data class SetCurrentBody(val amps: Double, val connectorId: Int = 1)
 @Serializable data class ClearProfileBody(val connectorId: Int? = null)
 
-fun Application.configureOcppWebUi(service: OcppService) {
+fun Application.configureOcppWebUi(service: OcppService, energyManager: EnergyManager) {
     val json = Json { encodeDefaults = true }
     routing {
         get("/ocpp-ui") {
@@ -56,6 +60,16 @@ fun Application.configureOcppWebUi(service: OcppService) {
 
             get("/transactions") {
                 call.respondText(json.encodeToString(service.recentTransactions(50)), ContentType.Application.Json)
+            }
+
+            get("/chargepoints/{id}/charger-control") {
+                call.respondText(json.encodeToString(energyManager.chargerControlFlow.value), ContentType.Application.Json)
+            }
+            post("/chargepoints/{id}/charger-control") {
+                val body = call.receive<ChargerControlBody>()
+                val mode = runCatching { ChargerMode.valueOf(body.mode) }.getOrDefault(ChargerMode.SOLAR)
+                energyManager.setCharging(ChargerControl(mode, body.fixedAmps, body.charging))
+                call.respond(HttpStatusCode.OK)
             }
 
             // Manual actions.

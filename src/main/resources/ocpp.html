@@ -127,9 +127,25 @@ function createCard(id) {
   clearBtn.addEventListener('click', () => clearProfile(id));
   controlRow.append(controlLabel, setCurrentBtn, clearBtn);
 
-  div.append(headRow, meta, connectors, actionRow, controlRow);
+  // Charger control (mirrors the app): Solar surplus vs Fixed (amps). Start/Stop is the actionRow.
+  const controlModeRow = document.createElement('div');
+  controlModeRow.className = 'row';
+  controlModeRow.style.marginTop = '8px';
+  const modeSelect = document.createElement('select');
+  modeSelect.innerHTML = '<option value="SOLAR">Solar surplus</option><option value="FIXED">Fixed power</option>';
+  const fixedA = document.createElement('input');
+  fixedA.type = 'number'; fixedA.min = '0'; fixedA.style.width = '64px';
+  const ccLabel = document.createElement('span');
+  ccLabel.className = 'muted';
+  ccLabel.append(document.createTextNode('Mode '), modeSelect, document.createTextNode(' Fixed A '), fixedA);
+  const ccSave = document.createElement('button');
+  ccSave.textContent = 'Apply';
+  ccSave.addEventListener('click', () => saveChargerControl(id));
+  controlModeRow.append(ccLabel, ccSave);
 
-  const entry = { card: div, refs: { scPill, prPill, meta, connectors, ampsInput, connInput, stopBtn } };
+  div.append(headRow, meta, connectors, controlModeRow, actionRow, controlRow);
+
+  const entry = { card: div, refs: { scPill, prPill, meta, connectors, modeSelect, fixedA, ampsInput, connInput, stopBtn } };
   cards[id] = entry;
   return entry;
 }
@@ -174,6 +190,7 @@ function render(state) {
     if (!entry) {
       entry = createCard(c.chargePointId);
       cp.appendChild(entry.card);
+      loadChargerControl(c.chargePointId); // once, at creation
     }
     updateCard(entry, c);
   });
@@ -272,6 +289,26 @@ async function clearProfile(id) {
   if (!confirm('Clear all charging profiles on ' + id + '?')) return;
   const r = await api('/chargepoints/' + id + '/clear-profile', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({}) });
   if (!r.ok) alert('Clear profile failed — charger rejected or offline.');
+}
+async function loadChargerControl(id) {
+  const r = await api('/chargepoints/' + id + '/charger-control');
+  const entry = cards[id];
+  if (!entry || !r.ok) return;
+  const c = await r.json();
+  const { modeSelect, fixedA } = entry.refs;
+  if (document.activeElement !== modeSelect) modeSelect.value = c.mode;
+  if (document.activeElement !== fixedA) fixedA.value = c.fixedAmps;
+}
+async function saveChargerControl(id) {
+  const entry = cards[id];
+  if (!entry) return;
+  const mode = entry.refs.modeSelect.value;
+  const fixedAmps = parseInt(entry.refs.fixedA.value, 10) || 0;
+  const r = await api('/chargepoints/' + id + '/charger-control', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode, fixedAmps, charging: true }),
+  });
+  if (!r.ok) alert('Apply failed — charger offline.');
 }
 
 function connect() {

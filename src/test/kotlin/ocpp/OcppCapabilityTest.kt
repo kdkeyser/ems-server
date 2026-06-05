@@ -12,7 +12,7 @@ class OcppCapabilityTest {
     private fun newService(): Pair<OcppService, ChargePointStore> {
         val db = freshTestDb()
         val store = ChargePointStore(db)
-        val svc = OcppService(store, IdTagStore(db), ChargerSettingsStore(db), TransactionStore(db),
+        val svc = OcppService(store, IdTagStore(db), TransactionStore(db),
             OcppConfig(true, 300, 60, callTimeoutSeconds = 1, autoProbeOnBoot = false)).also { it.initStores() }
         return svc to store
     }

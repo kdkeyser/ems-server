@@ -81,6 +81,7 @@ class Main : Klogging {
                     delay(5000)
                 }
             }
+            energyManager.loadChargerControl()
             launch { energyManager.run() }
             launch {
                 val server = embeddedServer(Netty, port = 8080) {
@@ -100,7 +101,7 @@ fun Application.module(energyManager: EnergyManager, wsConfig: WebSocketConfig, 
     configureSockets(energyManager, wsConfig)
     configureStatusPage(statusFlow)
     configureOcppServer(ocppService)
-    configureOcppWebUi(ocppService)
+    configureOcppWebUi(ocppService, energyManager)
     configureDatabases(database)
     configureMonitoring()
     configureHTTP()

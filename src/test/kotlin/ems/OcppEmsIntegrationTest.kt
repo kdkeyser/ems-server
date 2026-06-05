@@ -28,7 +28,6 @@ class OcppEmsIntegrationTest {
         every { svc.isPowerControlCapable("CP1") } returns true
         every { svc.latestPowerW("CP1", 1) } returns 0   // charger currently drawing 0 W
         every { svc.connectorStatus("CP1", 1) } returns null
-        coEvery { svc.getChargerSettings("CP1") } returns null
         coEvery { svc.setChargingProfile("CP1", 1, any(), any()) } returns true
         val charger = OcppCharger("CP1", 1, svc)
 
@@ -52,7 +51,7 @@ class OcppEmsIntegrationTest {
             batteries = mapOf("bat" to battery),
         )
         // config.yaml's first charger entry bounds amps to [6, 32].
-        val manager = EnergyManager(world, loadConfig("/config.yaml"), SurplusPriorityStrategy())
+        val manager = EnergyManager(world, loadConfig("/config.yaml"), SurplusPriorityStrategy(), FakeChargerControlStore())
 
         manager.tick()
 

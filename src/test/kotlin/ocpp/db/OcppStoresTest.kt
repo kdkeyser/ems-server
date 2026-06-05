@@ -40,18 +40,6 @@ class OcppStoresTest {
     }
 
     @Test
-    fun chargerSettingsRoundTrip() = runTest {
-        val db = freshTestDb()
-        val store = ChargerSettingsStore(db)
-        store.init()
-
-        store.put("CP01", maxCurrentA = 16, emsAutoControl = true)
-        val s = store.get("CP01")!!
-        assertEquals(16, s.maxCurrentA)
-        assertTrue(s.emsAutoControl)
-    }
-
-    @Test
     fun transactionInsertAndList() = runTest {
         val db = freshTestDb()
         val store = TransactionStore(db)
@@ -112,21 +100,23 @@ class OcppStoresTest {
     }
 
     @Test
-    fun chargerSettingsPutOverwrites() = runTest {
+    fun chargerControlRoundTrip() = runTest {
         val db = freshTestDb()
-        val store = ChargerSettingsStore(db)
+        val store = SqlChargerControlStore(db)
         store.init()
 
-        store.put("CP01", maxCurrentA = 16, emsAutoControl = true)
-        val initial = store.get("CP01")!!
-        assertEquals(16, initial.maxCurrentA)
-        assertTrue(initial.emsAutoControl)
+        assertNull(store.get("CP01"))
+        store.put("CP01", mode = "FIXED", fixedAmps = 16, charging = true)
+        val c = store.get("CP01")!!
+        assertEquals("FIXED", c.mode)
+        assertEquals(16, c.fixedAmps)
+        assertTrue(c.charging)
 
-        // Overwrite — update branch
-        store.put("CP01", maxCurrentA = 10, emsAutoControl = false)
-        val updated = store.get("CP01")!!
-        assertEquals(10, updated.maxCurrentA)
-        assertFalse(updated.emsAutoControl)
+        store.put("CP01", mode = "SOLAR", fixedAmps = 10, charging = false)
+        val c2 = store.get("CP01")!!
+        assertEquals("SOLAR", c2.mode)
+        assertEquals(10, c2.fixedAmps)
+        assertFalse(c2.charging)
     }
 
     @Test

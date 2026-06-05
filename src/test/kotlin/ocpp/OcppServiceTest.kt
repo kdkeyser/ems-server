@@ -17,7 +17,7 @@ class OcppServiceTest {
         val cfg = OcppConfig(enabled = true, heartbeatInterval = 300, connectionTimeout = 60,
             callTimeoutSeconds = 1, acceptUnknownChargePoints = acceptCp, acceptUnknownIdTags = acceptTags,
             autoProbeOnBoot = false)
-        return OcppService(ChargePointStore(db), IdTagStore(db), ChargerSettingsStore(db), TransactionStore(db), cfg)
+        return OcppService(ChargePointStore(db), IdTagStore(db), TransactionStore(db), cfg)
             .also { it.initStores() }
     }
 

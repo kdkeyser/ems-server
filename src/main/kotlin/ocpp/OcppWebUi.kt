@@ -1,5 +1,8 @@
 package io.konektis.ocpp
 
+import io.konektis.ChargerControl
+import io.konektis.ChargerMode
+import io.konektis.ems.EnergyManager
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -11,16 +14,16 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+@Serializable data class ChargerControlBody(val mode: String, val fixedAmps: Int, val charging: Boolean)
 @Serializable data class IdTagBody(val idTag: String, val status: String)
 @Serializable data class AcceptedBody(val accepted: Boolean)
-@Serializable data class SettingsBody(val maxCurrentA: Int, val emsAutoControl: Boolean)
 @Serializable data class StartBody(val idTag: String, val connectorId: Int? = null)
 @Serializable data class StopBody(val transactionId: Int)
 @Serializable data class ResetBody(val type: String = "Soft")
 @Serializable data class SetCurrentBody(val amps: Double, val connectorId: Int = 1)
 @Serializable data class ClearProfileBody(val connectorId: Int? = null)
 
-fun Application.configureOcppWebUi(service: OcppService) {
+fun Application.configureOcppWebUi(service: OcppService, energyManager: EnergyManager) {
     val json = Json { encodeDefaults = true }
     routing {
         get("/ocpp-ui") {
@@ -55,19 +58,20 @@ fun Application.configureOcppWebUi(service: OcppService) {
                 call.respond(HttpStatusCode.OK)
             }
 
-            get("/settings/{id}") {
-                val s = service.getChargerSettings(call.parameters["id"]!!)
-                if (s == null) call.respond(HttpStatusCode.NotFound)
-                else call.respondText(json.encodeToString(s), ContentType.Application.Json)
-            }
-            post("/settings/{id}") {
-                val body = call.receive<SettingsBody>()
-                service.putChargerSettings(call.parameters["id"]!!, body.maxCurrentA, body.emsAutoControl)
-                call.respond(HttpStatusCode.OK)
-            }
-
             get("/transactions") {
                 call.respondText(json.encodeToString(service.recentTransactions(50)), ContentType.Application.Json)
+            }
+
+            // Single configured charger: the {id} is accepted for URL symmetry but the control is
+            // global (EnergyManager owns one ChargerControl). Multi-charger is out of scope.
+            get("/chargepoints/{id}/charger-control") {
+                call.respondText(json.encodeToString(energyManager.chargerControlFlow.value), ContentType.Application.Json)
+            }
+            post("/chargepoints/{id}/charger-control") {
+                val body = call.receive<ChargerControlBody>()
+                val mode = runCatching { ChargerMode.valueOf(body.mode) }.getOrDefault(ChargerMode.SOLAR)
+                energyManager.setCharging(ChargerControl(mode, body.fixedAmps, body.charging))
+                call.respond(HttpStatusCode.OK)
             }
 
             // Manual actions.

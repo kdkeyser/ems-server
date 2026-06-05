@@ -1,6 +1,7 @@
 package io.konektis.ems
 
-import io.konektis.ChargingState
+import io.konektis.ChargerControl
+import io.konektis.ChargerMode
 import io.konektis.GlobalTimeSource
 import io.konektis.config.ChargingCurrent
 import io.konektis.config.Config
@@ -29,7 +30,7 @@ import io.mockk.mockk
 import io.mockk.runs
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
-import kotlin.test.assertTrue
+import kotlin.test.assertEquals
 
 private fun grid(power: Int?): Grid = mockk<Grid>().also {
     coEvery { it.update() } just runs
@@ -68,7 +69,7 @@ private fun config() = Config(
 
 class EnergyManagerTest {
 
-    private fun manager(world: World) = EnergyManager(world, config(), SurplusPriorityStrategy())
+    private fun manager(world: World) = EnergyManager(world, config(), SurplusPriorityStrategy(), FakeChargerControlStore())
 
     @Test fun `tier1 full data runs cascade and balances the measured grid`() = runTest {
         val bat = battery(0)
@@ -139,59 +140,55 @@ class EnergyManagerTest {
         coVerify(exactly = 1) { bat.releaseToInverter() }
     }
 
-    @Test fun `setCharging updates chargingStateFlow`() = runTest {
+    @Test fun `setCharging updates chargerControlFlow`() = runTest {
         val world = World(grid(0), mapOf("c" to charger(0)), emptyMap(), emptyMap(), mapOf("b" to battery(0)))
         val m = manager(world)
-        m.setCharging(ChargingState.NotCharging())
-        assertTrue(m.chargingStateFlow.value is ChargingState.NotCharging)
+        m.setCharging(ChargerControl(charging = false))
+        assertEquals(false, m.chargerControlFlow.value.charging)
     }
 
-    @Test fun `stop charging forces charger to zero amps in AUTO`() = runTest {
+    @Test fun `stop forces charger to zero amps in AUTO`() = runTest {
         val ch = charger(0)
         // Strong export would normally give the charger surplus amps; Stop overrides to 0.
         val world = World(grid(-5000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
         val m = manager(world)
-        m.setCharging(ChargingState.NotCharging())
+        m.setCharging(ChargerControl(ChargerMode.SOLAR, 16, charging = false))
         m.tick()
         coVerify { ch.setMaxChargerPower(Watt(0)) }
     }
 
-    @Test fun `fixed power sets clamped amps in AUTO`() = runTest {
+    @Test fun `fixed mode sets clamped amps in AUTO`() = runTest {
         val ch = charger(0)
         val world = World(grid(0), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
         val m = manager(world)
-        m.setCharging(ChargingState.ChargingWithMaxPower(3680u)) // 16A
+        m.setCharging(ChargerControl(ChargerMode.FIXED, 16, true))
         m.tick()
         coVerify { ch.setMaxChargerPower(Watt(16 * 230)) }
     }
 
-    @Test fun `excess power follows surplus in MANUAL, battery untouched`() = runTest {
+    @Test fun `MANUAL auto-reverts solar to fixed, battery untouched`() = runTest {
         val ch = charger(0)
         val bat = battery(0)
-        // grid -3000 export, charger 0 -> available 3000 -> 13A (2990W).
         val world = World(grid(-3000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to bat))
         val m = manager(world)
         m.setMode(Mode.MANUAL)
-        m.setCharging(ChargingState.ChargingWithExcessPower())
+        m.setCharging(ChargerControl(ChargerMode.SOLAR, 16, true)) // solar is meaningless in MANUAL -> fixed 16A
         m.tick()
-        coVerify { ch.setMaxChargerPower(Watt(13 * 230)) }
-        // battery is released once on the AUTO->MANUAL transition and never given a SetPower target here
+        coVerify { ch.setMaxChargerPower(Watt(16 * 230)) }
         coVerify(exactly = 0) { bat.setChargingPower(any()) }
     }
 
-    @Test fun `stop charging forces zero in MANUAL`() = runTest {
+    @Test fun `stop forces zero in MANUAL`() = runTest {
         val ch = charger(0)
         val world = World(grid(-3000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
         val m = manager(world)
         m.setMode(Mode.MANUAL)
-        m.setCharging(ChargingState.NotCharging())
+        m.setCharging(ChargerControl(charging = false))
         m.tick()
         coVerify { ch.setMaxChargerPower(Watt(0)) }
     }
 
     @Test fun `no car connected forces charger to zero despite surplus`() = runTest {
-        // charger reports NotConnected; default intent is ExcessPower. Strong export would normally
-        // allocate surplus to the charger, but with no car the EMS must not push power to it.
         val ch = mockk<Charger>(relaxed = true).also {
             coEvery { it.getState() } returns DeviceUpdate(
                 GlobalTimeSource.source.markNow(),
@@ -201,5 +198,16 @@ class EnergyManagerTest {
         val world = World(grid(-5000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
         manager(world).tick()
         coVerify { ch.setMaxChargerPower(Watt(0)) }
+    }
+
+    @Test fun `loadChargerControl restores persisted fixed amps`() = runTest {
+        val store = FakeChargerControlStore()
+        store.put("c", "FIXED", 10, true) // config() charger name is "c"
+        val ch = charger(0)
+        val world = World(grid(0), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
+        val m = EnergyManager(world, config(), SurplusPriorityStrategy(), store)
+        m.loadChargerControl()
+        m.tick()
+        coVerify { ch.setMaxChargerPower(Watt(10 * 230)) }
     }
 }

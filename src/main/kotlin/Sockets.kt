@@ -65,9 +65,9 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
             }
 
             val chargingJob = launch {
-                energyManager.chargingStateFlow.collect { state ->
+                energyManager.chargerControlFlow.collect { control ->
                     if (authenticated) {
-                        send(Json.encodeToString(Message.ChargingStateUpdate(state) as Message))
+                        send(Json.encodeToString(Message.ChargerControlUpdate(control) as Message))
                     }
                 }
             }
@@ -83,7 +83,7 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
                                     send(Json.encodeToString(Message.Authenticated(message.username) as Message))
                                     // Send the current mode immediately so the client reflects it on connect.
                                     send(Json.encodeToString(Message.ModeUpdate(energyManager.modeFlow.value) as Message))
-                                    send(Json.encodeToString(Message.ChargingStateUpdate(energyManager.chargingStateFlow.value) as Message))
+                                    send(Json.encodeToString(Message.ChargerControlUpdate(energyManager.chargerControlFlow.value) as Message))
                                 } else {
                                     send(Json.encodeToString(Message.Unauthorized(message.username) as Message))
                                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication failed"))
@@ -103,8 +103,7 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
                                 if (!authenticated) {
                                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication required"))
                                 } else {
-                                    // The chargingJob collector echoes the resulting ChargingStateUpdate; no explicit send here.
-                                    energyManager.setCharging(message.chargingState)
+                                    energyManager.setCharging(message.control)
                                 }
                             }
                             else -> {

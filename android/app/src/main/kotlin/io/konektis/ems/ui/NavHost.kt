@@ -32,7 +32,7 @@ fun EmsNavHost(app: EmsApplication) {
             statusFlow    = app.component.statusWsClient.statusFlow,
             controlState  = app.component.controlWsClient.connectionState,
             mode          = app.component.controlWsClient.mode,
-            chargingState = app.component.controlWsClient.chargingState,
+            chargerControl = app.component.controlWsClient.chargerControl,
             sendCommand   = { app.component.controlWsClient.send(it) }
         )
     })

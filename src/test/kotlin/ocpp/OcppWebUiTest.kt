@@ -1,6 +1,8 @@
 package io.konektis.ocpp
 
 import io.konektis.config.OcppConfig
+import io.konektis.ems.EnergyManager
+import io.konektis.ems.SurplusPriorityStrategy
 import io.konektis.ocpp.db.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -10,6 +12,7 @@ import io.ktor.server.application.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.testing.*
 import io.ktor.server.websocket.*
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 import kotlin.time.Duration.Companion.seconds
@@ -20,9 +23,13 @@ class OcppWebUiTest {
         install(WebSockets) { pingPeriod = 30.seconds; timeout = 60.seconds }
         install(ContentNegotiation) { json() }
         val db = freshTestDb()
-        val svc = OcppService(ChargePointStore(db), IdTagStore(db), ChargerSettingsStore(db), TransactionStore(db),
+        val svc = OcppService(ChargePointStore(db), IdTagStore(db), TransactionStore(db),
             OcppConfig(true, 300, 60, autoProbeOnBoot = false)).also { it.initStores() }
-        configureOcppWebUi(svc)
+        val em = EnergyManager(
+            io.konektis.devices.World(mockk(relaxed = true), emptyMap(), emptyMap(), emptyMap(), emptyMap()),
+            mockk(relaxed = true), SurplusPriorityStrategy(), SqlChargerControlStore(db),
+        )
+        configureOcppWebUi(svc, em)
         return svc
     }
 
@@ -47,6 +54,20 @@ class OcppWebUiTest {
 
         val list = client.get("/ocpp-ui/api/idtags").bodyAsText()
         assertTrue(list.contains("TAG1"))
+    }
+
+    @Test
+    fun chargerControlRoundTripOverHttp() = testApplication {
+        application { testModule() }
+        val post = client.post("/ocpp-ui/api/chargepoints/CP1/charger-control") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"mode":"FIXED","fixedAmps":20,"charging":false}""")
+        }
+        assertEquals(HttpStatusCode.OK, post.status)
+        val body = client.get("/ocpp-ui/api/chargepoints/CP1/charger-control").bodyAsText()
+        assertTrue(body.contains("FIXED"))
+        assertTrue(body.contains("20"))
+        assertTrue(body.contains("false"))
     }
 
     @Test

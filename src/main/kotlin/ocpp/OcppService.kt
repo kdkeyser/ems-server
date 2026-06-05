@@ -71,7 +71,6 @@ data class OcppConnectorView(val connectorId: Int, val status: String, val power
 class OcppService(
     private val chargePoints: ChargePointStore,
     private val idTags: IdTagStore,
-    private val settings: ChargerSettingsStore,
     private val transactions: TransactionStore,
     private val config: OcppConfig,
 ) : Klogging {
@@ -87,7 +86,7 @@ class OcppService(
     val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = false }
 
     fun initStores() {
-        chargePoints.init(); idTags.init(); settings.init(); transactions.init()
+        chargePoints.init(); idTags.init(); transactions.init()
         transactionIdCounter.set(transactions.maxTransactionId() + 1)
     }
 
@@ -223,15 +222,11 @@ class OcppService(
     fun isPowerControlCapable(chargePointId: String): Boolean =
         sessions[chargePointId]?.smartChargingSupported == true
 
-    suspend fun getChargerSettings(id: String): ChargerSettingsRecord? = settings.get(id)
-
     suspend fun listChargePoints() = chargePoints.all()
     suspend fun setChargePointAccepted(id: String, accepted: Boolean) = chargePoints.setAccepted(id, accepted)
     suspend fun listIdTags() = idTags.all()
     suspend fun putIdTag(idTag: String, status: String) = idTags.put(idTag, status)
     suspend fun deleteIdTag(idTag: String) = idTags.delete(idTag)
-    suspend fun putChargerSettings(id: String, maxCurrentA: Int, emsAutoControl: Boolean) =
-        settings.put(id, maxCurrentA, emsAutoControl)
 
     /** Update SmartCharging support from a GetConfiguration reply (SupportedFeatureProfiles). */
     suspend fun applyCapabilityProbe(chargePointId: String, response: GetConfigurationResponse) {

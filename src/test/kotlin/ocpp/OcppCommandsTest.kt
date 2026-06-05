@@ -13,7 +13,7 @@ class OcppCommandsTest {
 
     private fun newService(): OcppService {
         val db = freshTestDb()
-        return OcppService(ChargePointStore(db), IdTagStore(db), ChargerSettingsStore(db), TransactionStore(db),
+        return OcppService(ChargePointStore(db), IdTagStore(db), TransactionStore(db),
             OcppConfig(true, 300, 60, callTimeoutSeconds = 1)).also { it.initStores() }
     }
 

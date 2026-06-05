@@ -112,30 +112,41 @@ class IdTagStore(private val db: Database) {
     }
 }
 
-@Serializable
-data class ChargerSettingsRecord(val chargePointId: String, val maxCurrentA: Int, val emsAutoControl: Boolean)
+data class ChargerControlRecord(val chargePointId: String, val mode: String, val fixedAmps: Int, val charging: Boolean)
 
-class ChargerSettingsStore(private val db: Database) {
-    fun init() = transaction(db) { SchemaUtils.create(OcppChargerSettings) }
+/** Persisted per-charger control intent. An interface so EnergyManager unit tests can fake it. */
+interface ChargerControlStore {
+    fun init()
+    suspend fun get(id: String): ChargerControlRecord?
+    suspend fun put(id: String, mode: String, fixedAmps: Int, charging: Boolean)
+}
 
-    suspend fun get(id: String): ChargerSettingsRecord? = dbQuery(db) {
-        OcppChargerSettings.selectAll().where { OcppChargerSettings.chargePointId eq id }.singleOrNull()?.let {
-            ChargerSettingsRecord(it[OcppChargerSettings.chargePointId], it[OcppChargerSettings.maxCurrentA], it[OcppChargerSettings.emsAutoControl])
+class SqlChargerControlStore(private val db: Database) : ChargerControlStore {
+    override fun init() = transaction(db) { SchemaUtils.create(OcppChargerControl) }
+
+    override suspend fun get(id: String): ChargerControlRecord? = dbQuery(db) {
+        OcppChargerControl.selectAll().where { OcppChargerControl.chargePointId eq id }.singleOrNull()?.let {
+            ChargerControlRecord(
+                it[OcppChargerControl.chargePointId], it[OcppChargerControl.mode],
+                it[OcppChargerControl.fixedAmps], it[OcppChargerControl.charging],
+            )
         }
     }
 
-    suspend fun put(id: String, maxCurrentA: Int, emsAutoControl: Boolean) = dbQuery(db) {
-        val exists = OcppChargerSettings.selectAll().where { OcppChargerSettings.chargePointId eq id }.any()
+    override suspend fun put(id: String, mode: String, fixedAmps: Int, charging: Boolean) = dbQuery(db) {
+        val exists = OcppChargerControl.selectAll().where { OcppChargerControl.chargePointId eq id }.any()
         if (exists) {
-            OcppChargerSettings.update({ OcppChargerSettings.chargePointId eq id }) {
-                it[OcppChargerSettings.maxCurrentA] = maxCurrentA
-                it[OcppChargerSettings.emsAutoControl] = emsAutoControl
+            OcppChargerControl.update({ OcppChargerControl.chargePointId eq id }) {
+                it[OcppChargerControl.mode] = mode
+                it[OcppChargerControl.fixedAmps] = fixedAmps
+                it[OcppChargerControl.charging] = charging
             }
         } else {
-            OcppChargerSettings.insert {
+            OcppChargerControl.insert {
                 it[chargePointId] = id
-                it[OcppChargerSettings.maxCurrentA] = maxCurrentA
-                it[OcppChargerSettings.emsAutoControl] = emsAutoControl
+                it[OcppChargerControl.mode] = mode
+                it[OcppChargerControl.fixedAmps] = fixedAmps
+                it[OcppChargerControl.charging] = charging
             }
         }
         Unit

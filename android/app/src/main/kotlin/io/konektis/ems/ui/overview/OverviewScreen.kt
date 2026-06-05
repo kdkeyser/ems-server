@@ -13,8 +13,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.konektis.ems.R
 import io.konektis.ems.data.model.StatusState
 import io.konektis.ems.ui.components.DeviceCard
 import io.konektis.ems.ui.components.EnergyFlowDiagram
@@ -38,11 +40,11 @@ fun OverviewScreen(state: StatusState?, modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Waiting for data…", fontSize = 14.sp, color = ems.idle)
+                Text(stringResource(R.string.overview_waiting), fontSize = 14.sp, color = ems.idle)
             }
         } else {
             Text(
-                "DEVICES",
+                stringResource(R.string.overview_devices),
                 style = MaterialTheme.typography.labelSmall,
                 color = ems.idle,
                 modifier = Modifier.padding(top = 4.dp, start = 4.dp),

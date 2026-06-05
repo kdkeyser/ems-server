@@ -12,8 +12,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.konektis.ems.R
 import io.konektis.ems.data.model.DeviceHealth
 import io.konektis.ems.data.model.DeviceStatus
 import io.konektis.ems.ui.theme.LocalEmsColors
@@ -49,8 +51,8 @@ fun DeviceCard(device: DeviceStatus, modifier: Modifier = Modifier) {
             ) {
                 Text(device.name, fontSize = 14.sp)
                 val subtitle = when (health) {
-                    is DeviceHealth.Online -> "Online" + (health.extraInfo?.let { " · $it" } ?: "")
-                    is DeviceHealth.Offline -> health.lastError?.let { "Offline · $it" } ?: "Offline"
+                    is DeviceHealth.Online -> stringResource(R.string.status_online) + (health.extraInfo?.let { " · $it" } ?: "")
+                    is DeviceHealth.Offline -> health.lastError?.let { "${stringResource(R.string.status_offline)} · $it" } ?: stringResource(R.string.status_offline)
                 }
                 val subtitleColor = if (online) ems.idle else ems.consumption
                 Text(subtitle, fontSize = 11.sp, color = subtitleColor)

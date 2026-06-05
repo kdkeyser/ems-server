@@ -35,9 +35,6 @@ import io.konektis.ems.data.model.ChargerMode
 import io.konektis.ems.data.model.ManagerMode
 import io.konektis.ems.data.model.StatusState
 import io.konektis.ems.data.model.parseChargerConnection
-import io.konektis.ems.ui.components.EmsIcons
-import io.konektis.ems.ui.components.StatusHero
-import io.konektis.ems.ui.components.formatWatts
 import io.konektis.ems.ui.theme.LocalEmsColors
 
 @Composable
@@ -63,48 +60,22 @@ fun ChargerScreen(
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        when (uiState) {
-            ChargerUiState.NO_CAR -> {
-                StatusHero(
-                    icon = EmsIcons.Charger,
-                    value = "No car",
-                    valueColor = ems.idle,
-                    statusText = "No car connected",
-                    online = false,
-                )
-            }
-            else -> {
-                val online = uiState != ChargerUiState.CONTROLS_FALLBACK || chargerW != null
-                StatusHero(
-                    icon = EmsIcons.Charger,
-                    value = when {
-                        isCharging && chargerW != null -> formatWatts(chargerW)
-                        isCharging -> "Charging"
-                        else -> "Idle"
-                    },
-                    valueColor = if (isCharging) ems.consumption else ems.idle,
-                    statusText = when (uiState) {
-                        ChargerUiState.CHARGING -> "Charging"
-                        ChargerUiState.CONNECTED_IDLE -> "Connected — not charging"
-                        else -> if (chargerW != null) "Charger online" else "Status unavailable"
-                    },
-                    online = online,
-                )
+        ChargerHero(uiState = uiState, chargerW = chargerW)
 
-                if (isAuthenticated && chargerControl != null) {
-                    ChargerControls(
-                        isCharging = isCharging,
-                        control = chargerControl,
-                        mode = mode,
-                        onSetCharging = onSetCharging,
-                    )
-                } else {
-                    Text(
-                        "Charger control unavailable — check credentials in Settings.",
-                        fontSize = 14.sp,
-                        color = ems.idle,
-                    )
-                }
+        if (uiState != ChargerUiState.NO_CAR) {
+            if (isAuthenticated && chargerControl != null) {
+                ChargerControls(
+                    isCharging = isCharging,
+                    control = chargerControl,
+                    mode = mode,
+                    onSetCharging = onSetCharging,
+                )
+            } else {
+                Text(
+                    "Charger control unavailable — check credentials in Settings.",
+                    fontSize = 14.sp,
+                    color = ems.idle,
+                )
             }
         }
     }

@@ -101,15 +101,14 @@ class ControlWsClient(
                             }
                             cmdJob.cancel()
                             _connectionState.value = ControlState.Disconnected()
-                            _mode.value = null
-                            _chargerControl.value = null
+                            // Keep the last-known mode/charger control across a transient drop so the
+                            // hero bolt + mode indicator don't flash on reconnect; the server re-sends
+                            // both on the next successful auth. (A real Unauthorized still clears them.)
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         _connectionState.value = ControlState.Disconnected(e.message)
-                        _mode.value = null
-                        _chargerControl.value = null
                     }
                     if (_connectionState.value is ControlState.Unauthenticated) break
                     delay(WS_BACKOFF[minOf(attempt++, WS_BACKOFF.size - 1)])

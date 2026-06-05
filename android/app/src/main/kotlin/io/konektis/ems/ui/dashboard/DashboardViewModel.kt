@@ -3,7 +3,7 @@ package io.konektis.ems.ui.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.konektis.ems.data.ControlState
-import io.konektis.ems.data.model.ChargingState
+import io.konektis.ems.data.model.ChargerControl
 import io.konektis.ems.data.model.ClientMessage
 import io.konektis.ems.data.model.ManagerMode
 import io.konektis.ems.data.model.StatusState
@@ -18,7 +18,7 @@ class DashboardViewModel(
     statusFlow: Flow<StatusState>,
     val controlState: StateFlow<ControlState>,
     val mode: StateFlow<ManagerMode?> = MutableStateFlow(null),
-    val chargingState: StateFlow<ChargingState?> = MutableStateFlow(null),
+    val chargerControl: StateFlow<ChargerControl?> = MutableStateFlow(null),
     private val sendCommand: suspend (ClientMessage) -> Unit
 ) : ViewModel() {
 
@@ -28,9 +28,9 @@ class DashboardViewModel(
         null
     )
 
-    fun setCharging(state: ChargingState) {
+    fun setCharging(control: ChargerControl) {
         viewModelScope.launch {
-            sendCommand(ClientMessage.SetCharging(state))
+            sendCommand(ClientMessage.SetCharging(control))
         }
     }
 

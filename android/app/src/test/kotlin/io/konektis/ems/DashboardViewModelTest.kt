@@ -3,7 +3,7 @@
 package io.konektis.ems
 
 import io.konektis.ems.data.ControlState
-import io.konektis.ems.data.model.ChargingState
+import io.konektis.ems.data.model.ChargerControl
 import io.konektis.ems.data.model.ClientMessage
 import io.konektis.ems.data.model.DeviceHealth
 import io.konektis.ems.data.model.DeviceStatus
@@ -73,10 +73,10 @@ class DashboardViewModelTest {
             controlState = MutableStateFlow(ControlState.Authenticated),
             sendCommand = { sent.add(it) }
         )
-        vm.setCharging(ChargingState.NotCharging)
+        vm.setCharging(ChargerControl(charging = false))
         yield()
         assertEquals(1, sent.size)
-        assertEquals(ClientMessage.SetCharging(ChargingState.NotCharging), sent.first())
+        assertEquals(ClientMessage.SetCharging(ChargerControl(charging = false)), sent.first())
     }
 
     @Test

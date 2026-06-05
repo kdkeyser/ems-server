@@ -8,12 +8,14 @@ import kotlinx.serialization.Serializable
 // class name, which differs between this package (io.konektis.ems.data.model) and the server
 // (io.konektis) — control messages would then fail to decode server-side.
 
+@Serializable enum class ChargerMode { SOLAR, FIXED }
+
 @Serializable
-sealed class ChargingState {
-    @Serializable @SerialName("NotCharging") data object NotCharging : ChargingState()
-    @Serializable @SerialName("ChargingWithExcessPower") data object ChargingWithExcessPower : ChargingState()
-    @Serializable @SerialName("ChargingWithMaxPower") data class ChargingWithMaxPower(val maxPower: UInt) : ChargingState()
-}
+data class ChargerControl(
+    val mode: ChargerMode = ChargerMode.SOLAR,
+    val fixedAmps: Int = 16,
+    val charging: Boolean = true,
+)
 
 @Serializable
 enum class Devices { SOLAR, BATTERY, CAR_CHARGER, HEATPUMP, GRID }
@@ -30,12 +32,12 @@ sealed class Message {
     @Serializable @SerialName("Authenticated") data class Authenticated(val username: String) : Message()
     @Serializable @SerialName("Unauthorized") data class Unauthorized(val username: String) : Message()
     @Serializable @SerialName("ModeUpdate") data class ModeUpdate(val mode: ManagerMode) : Message()
-    @Serializable @SerialName("ChargingStateUpdate") data class ChargingStateUpdate(val chargingState: ChargingState) : Message()
+    @Serializable @SerialName("ChargerControlUpdate") data class ChargerControlUpdate(val control: ChargerControl) : Message()
 }
 
 @Serializable
 sealed class ClientMessage {
-    @Serializable @SerialName("SetCharging") data class SetCharging(val chargingState: ChargingState) : ClientMessage()
+    @Serializable @SerialName("SetCharging") data class SetCharging(val control: ChargerControl) : ClientMessage()
     @Serializable @SerialName("Authenticate") data class Authenticate(val username: String, val password: String) : ClientMessage()
     @Serializable @SerialName("SetMode") data class SetMode(val mode: ManagerMode) : ClientMessage()
 }

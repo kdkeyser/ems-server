@@ -62,7 +62,7 @@ fun DashboardScreen(
     val status by vm.statusState.collectAsState()
     val controlState by vm.controlState.collectAsState()
     val mode by vm.mode.collectAsState()
-    val chargingState by vm.chargingState.collectAsState()
+    val chargerControl by vm.chargerControl.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
 
     val statusBanner: Pair<Color, String>? = when (connectionState) {
@@ -118,7 +118,7 @@ fun DashboardScreen(
                 1 -> ChargerScreen(
                     statusState = status,
                     controlState = controlState,
-                    chargingState = chargingState,
+                    chargerControl = chargerControl,
                     mode = mode,
                     onSetCharging = vm::setCharging
                 )

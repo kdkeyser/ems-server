@@ -122,12 +122,18 @@ private fun ChargerControls(
         SegmentedButton(
             selected = selectedMode == ChargerMode.SOLAR,
             enabled = solarAllowed,
-            onClick = { selectedMode = ChargerMode.SOLAR },
+            onClick = {
+                selectedMode = ChargerMode.SOLAR
+                liveChargingUpdate(sessionActive, ChargerMode.SOLAR, fixedAmps)?.let(onSetCharging)
+            },
             shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
         ) { Text(stringResource(R.string.charger_mode_solar)) }
         SegmentedButton(
             selected = selectedMode == ChargerMode.FIXED,
-            onClick = { selectedMode = ChargerMode.FIXED },
+            onClick = {
+                selectedMode = ChargerMode.FIXED
+                liveChargingUpdate(sessionActive, ChargerMode.FIXED, fixedAmps)?.let(onSetCharging)
+            },
             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
         ) { Text(stringResource(R.string.charger_mode_fixed)) }
     }
@@ -150,6 +156,11 @@ private fun ChargerControls(
                 Slider(
                     value = fixedAmps.toFloat(),
                     onValueChange = { fixedAmps = it.toInt() },
+                    // Push the new current once, on release, so an active session retargets without
+                    // flooding the socket on every drag step.
+                    onValueChangeFinished = {
+                        liveChargingUpdate(sessionActive, ChargerMode.FIXED, fixedAmps)?.let(onSetCharging)
+                    },
                     valueRange = 6f..32f,
                     steps = 25,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),

@@ -37,6 +37,10 @@
     <string name="charger_control_unavailable">Laderbediening niet beschikbaar — controleer de inloggegevens in Instellingen.</string>
     <string name="charger_start">OPLADEN STARTEN</string>
     <string name="charger_stop">OPLADEN STOPPEN</string>
+    <string name="charger_starting">Starten…</string>
+    <string name="charger_stopping">Stoppen…</string>
+    <string name="charger_value_ready">Gereed</string>
+    <string name="charger_status_session_not_drawing">Sessie actief — auto laadt niet</string>
 
     <!-- charger hero -->
     <string name="charger_value_no_car">Geen auto</string>

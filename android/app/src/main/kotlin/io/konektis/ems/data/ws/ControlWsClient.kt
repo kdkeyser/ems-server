@@ -18,10 +18,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
@@ -44,9 +47,15 @@ class ControlWsClient(
 
     private val commandChannel = Channel<ClientMessage>(Channel.BUFFERED)
 
+    private val reconnectSignal = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** Force an immediate reconnect (cancels any in-flight backoff). Called on app foreground. */
+    fun reconnectNow() { reconnectSignal.tryEmit(Unit) }
+
     init {
         scope.launch {
-            settings.settingsFlow.collectLatest { s ->
+            combine(settings.settingsFlow, reconnectSignal.onStart { emit(Unit) }) { s, _ -> s }
+                .collectLatest { s ->
                 if (s.serverUrl.isBlank()) {
                     _connectionState.value = ControlState.Disconnected()
                     return@collectLatest

@@ -136,30 +136,29 @@ class OcppChargerTest {
     }
 
     @Test
-    fun `zero power stops the active transaction`() = runTest {
+    fun `zero power stops the active transaction and sends no profile`() = runTest {
         val svc = mockk<OcppService>()
         every { svc.activeTransactionId("CP1", 1) } returns 42
-        every { svc.isPowerControlCapable("CP1") } returns true
         coEvery { svc.remoteStop("CP1", 42) } returns true
-        coEvery { svc.setChargingProfile("CP1", 1, any(), any()) } returns true
         val charger = OcppCharger("CP1", 1, svc)
 
         charger.setMaxChargerPower(Watt(0))
 
         coVerify { svc.remoteStop("CP1", 42) }
+        // Stopping the transaction is the off switch; no redundant 0 A profile.
+        coVerify(exactly = 0) { svc.setChargingProfile(any(), any(), any(), any()) }
     }
 
     @Test
     fun `zero power is a no-op when no transaction is open`() = runTest {
         val svc = mockk<OcppService>()
         every { svc.activeTransactionId("CP1", 1) } returns null
-        every { svc.isPowerControlCapable("CP1") } returns true
-        coEvery { svc.setChargingProfile("CP1", 1, any(), any()) } returns true
         val charger = OcppCharger("CP1", 1, svc)
 
         charger.setMaxChargerPower(Watt(0))
 
         coVerify(exactly = 0) { svc.remoteStop(any(), any()) }
+        coVerify(exactly = 0) { svc.setChargingProfile(any(), any(), any(), any()) }
     }
 
 }

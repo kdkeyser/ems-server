@@ -62,7 +62,13 @@ class OcppCharger(
 
         // Open or close the transaction to match intent BEFORE (and regardless of) SmartCharging:
         // without a transaction the car never charges, no matter what profile we set.
-        if (amps > 0) ensureTransactionStarted() else ensureTransactionStopped()
+        if (amps == 0) {
+            // Charging off: stopping the transaction is the off switch. A 0 A profile would just be
+            // redundant chatter on every tick (and leaves a 0 A default behind), so skip it.
+            ensureTransactionStopped()
+            return
+        }
+        ensureTransactionStarted()
 
         if (!service.isPowerControlCapable(chargePointId)) {
             logger.debug { "OcppCharger $chargePointId: SmartCharging unsupported, skipping setChargingProfile" }

@@ -53,18 +53,20 @@ class SurplusPriorityStrategyTest {
     }
 
     @Test
-    fun `surplus below charger minimum — charger stops, battery charges the surplus`() {
-        // Exporting 200W, charger off. 200/230 < 6A min -> charger = 0. projectedGrid = -200 -> +200W.
+    fun `surplus below charger minimum — charger held at minimum during the session`() {
+        // Exporting 200W. 200/230 < 6A, but an active solar session floors the charger at its 6A minimum
+        // (the difference is imported). Battery balances the measured grid: 0 - (-200) = +200W.
         val decisions = strategy.decide(snapshot(gridPower = -200, chargerPower = 0, chargerMinAmps = 6))
-        assertEquals(0, decisions.chargerMaxAmps)
+        assertEquals(6, decisions.chargerMaxAmps)
         assertEquals(BatteryCommand.SetPower(Watt(200)), decisions.batteryCommand)
     }
 
     @Test
-    fun `zero solar and importing — charger stops, battery covers the deficit`() {
-        // Importing 1500W, charger off, no solar. projectedGrid = 1500 -> battery -1500W (discharge).
+    fun `zero solar and importing — charger held at minimum, battery covers the measured deficit`() {
+        // Importing 1500W, no solar. The active solar session still holds the charger at 6A min.
+        // Battery balances the measured grid: 0 - 1500 = -1500W (discharge).
         val decisions = strategy.decide(snapshot(gridPower = 1500, chargerPower = 0))
-        assertEquals(0, decisions.chargerMaxAmps)
+        assertEquals(6, decisions.chargerMaxAmps)
         assertEquals(BatteryCommand.SetPower(Watt(-1500)), decisions.batteryCommand)
     }
 
@@ -94,10 +96,18 @@ class SurplusPriorityStrategyTest {
     @Test
     fun `holds current battery power when the grid is balanced within the deadband`() {
         // Battery already charging 500W; measured grid only 40W off -> within the 50W deadband -> hold 500W.
-        // available = 0 + 500 + 40 = 540W -> 2A < 6A min -> charger 0.
+        // Surplus maps to 2A < 6A, but the active solar session floors the charger at 6A min.
         val decisions = strategy.decide(snapshot(gridPower = -40, chargerPower = 0, batteryPower = 500))
-        assertEquals(0, decisions.chargerMaxAmps)
+        assertEquals(6, decisions.chargerMaxAmps)
         assertEquals(BatteryCommand.SetPower(Watt(500)), decisions.batteryCommand)
+    }
+
+    @Test
+    fun `no surplus during an active solar session still holds the charger at minimum`() {
+        // Grid balanced (no surplus, no import). The surplus path (active solar session) still floors
+        // the charger at its minimum rather than dropping to 0 — preventing on/off relay chatter.
+        val decisions = strategy.decide(snapshot(gridPower = 0, chargerPower = 0, chargerMinAmps = 6))
+        assertEquals(6, decisions.chargerMaxAmps)
     }
 
     @Test

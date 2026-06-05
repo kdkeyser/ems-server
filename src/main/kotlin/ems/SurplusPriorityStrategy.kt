@@ -45,18 +45,12 @@ class SurplusPriorityStrategy(
             ConsumeMode.SuggestConsumeUpTo(Watt(headroom))
         }
 
-        // Car charger: forced override (Stop/Fixed) wins; otherwise assign available surplus.
-        val chargerAmps = snapshot.chargerOverrideAmps?.coerceIn(0, snapshot.chargerMaxAmps) ?: when {
-            available <= 0 -> 0
-            else -> {
-                val amps = available / 230
-                when {
-                    amps < snapshot.chargerMinAmps -> 0
-                    amps > snapshot.chargerMaxAmps -> snapshot.chargerMaxAmps
-                    else -> amps
-                }
-            }
-        }
+        // Car charger: forced override (Stop/Fixed) wins; otherwise assign the available surplus.
+        // During an active solar session (override == null) never drop below the minimum — a car won't
+        // charge below it, so dropping to 0 just chatters the relays. The shortfall is imported (the
+        // battery, balancing the measured grid, covers it first).
+        val chargerAmps = snapshot.chargerOverrideAmps?.coerceIn(0, snapshot.chargerMaxAmps)
+            ?: (available / 230).coerceIn(snapshot.chargerMinAmps, snapshot.chargerMaxAmps)
         // Battery balances the MEASURED grid, not the charger setpoint: the charger's real draw —
         // whatever the car actually takes — already shows up in gridPower. Feeding the commanded
         // setpoint forward instead parked the grid in steady-state export whenever the car drew less

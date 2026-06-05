@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- actions -->
+    <string name="action_save">Opslaan</string>
+    <string name="action_cancel">Annuleren</string>
+    <string name="action_back">Terug</string>
+
+    <!-- nav / tabs -->
+    <string name="settings_title">Instellingen</string>
+    <string name="tab_overview">Overzicht</string>
+    <string name="tab_charger">Lader</string>
+    <string name="tab_heatpump">Warmtepomp</string>
+
+    <!-- connection banner -->
+    <string name="conn_connecting">Verbinden…</string>
+    <string name="conn_disconnected">Verbinding verbroken</string>
+
+    <!-- EMS mode card -->
+    <string name="ems_mode_label">EMS-MODUS</string>
+    <string name="ems_mode_auth_hint">Meld je aan in Instellingen om de modus te wijzigen</string>
+    <string name="ems_mode_waiting">Wachten op modus…</string>
+    <string name="ems_mode_auto_subtitle">Automatisch — EMS optimaliseert het vermogen</string>
+    <string name="ems_mode_manual_subtitle">Handmatig — apparaten regelen zichzelf</string>
+    <string name="ems_mode_auto">Automatisch</string>
+    <string name="ems_mode_manual">Handmatig</string>
+    <string name="manual_dialog_title">Overschakelen naar handmatig?</string>
+    <string name="manual_dialog_body">De EMS stopt met het aansturen van de batterij, lader en warmtepomp en geeft de batterij terug aan de omvormer. Jij wordt verantwoordelijk voor de sturing.</string>
+    <string name="manual_dialog_confirm">Overschakelen naar handmatig</string>
+
+    <!-- charger controls -->
+    <string name="charger_mode_label">MODUS</string>
+    <string name="charger_mode_solar">Zonne-overschot</string>
+    <string name="charger_mode_fixed">Vast vermogen</string>
+    <string name="charger_fixed_current">Vaste stroom</string>
+    <string name="charger_amps">%1$d A</string>
+    <string name="charger_manual_note">EMS staat in handmatige modus — alleen vast vermogen geldt voor de lader.</string>
+    <string name="charger_control_unavailable">Laderbediening niet beschikbaar — controleer de inloggegevens in Instellingen.</string>
+    <string name="charger_start">OPLADEN STARTEN</string>
+    <string name="charger_stop">OPLADEN STOPPEN</string>
+
+    <!-- charger hero -->
+    <string name="charger_value_no_car">Geen auto</string>
+    <string name="charger_charging">Opladen</string>
+    <string name="charger_value_idle">Inactief</string>
+    <string name="charger_status_no_car">Geen auto aangesloten</string>
+    <string name="charger_status_connected_idle">Aangesloten — niet aan het opladen</string>
+    <string name="charger_status_online">Lader online</string>
+    <string name="charger_status_unavailable">Status niet beschikbaar</string>
+    <string name="cd_charger">Lader</string>
+    <string name="cd_car">Auto</string>
+    <string name="cd_charging">Opladen</string>
+
+    <!-- device status -->
+    <string name="status_online">Online</string>
+    <string name="status_offline">Offline</string>
+    <string name="status_no_data">Geen gegevens</string>
+    <string name="heatpump_no_controls">Geen bediening beschikbaar — de server toont alleen de warmtepompstatus.</string>
+
+    <!-- energy flow diagram -->
+    <string name="flow_solar">Zon</string>
+    <string name="flow_home">Thuis</string>
+    <string name="flow_grid_export">Net · export</string>
+    <string name="flow_grid_import">Net · import</string>
+    <string name="flow_battery">Batterij</string>
+    <string name="flow_battery_soc">Batterij · %1$d%%</string>
+
+    <!-- overview -->
+    <string name="overview_waiting">Wachten op gegevens…</string>
+    <string name="overview_devices">APPARATEN</string>
+
+    <!-- settings -->
+    <string name="settings_server">Serveradres</string>
+    <string name="settings_server_hint">ems.kenas.be of 10.0.2.2:8080</string>
+    <string name="settings_username">Gebruikersnaam</string>
+    <string name="settings_password">Wachtwoord</string>
+    <string name="settings_edge_key">Edge-sleutel (X-EMS-Edge-Key)</string>
+    <string name="settings_use_tls">TLS gebruiken (wss)</string>
+</resources>

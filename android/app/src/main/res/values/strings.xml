@@ -1,4 +1,80 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">EMS</string>
+
+    <!-- actions -->
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_back">Back</string>
+
+    <!-- nav / tabs -->
+    <string name="settings_title">Settings</string>
+    <string name="tab_overview">Overview</string>
+    <string name="tab_charger">Charger</string>
+    <string name="tab_heatpump">Heat Pump</string>
+
+    <!-- connection banner -->
+    <string name="conn_connecting">Connecting…</string>
+    <string name="conn_disconnected">Disconnected</string>
+
+    <!-- EMS mode card -->
+    <string name="ems_mode_label">EMS MODE</string>
+    <string name="ems_mode_auth_hint">Authenticate in Settings to change mode</string>
+    <string name="ems_mode_waiting">Waiting for mode…</string>
+    <string name="ems_mode_auto_subtitle">Automatic — EMS optimises power</string>
+    <string name="ems_mode_manual_subtitle">Manual — devices left to their own control</string>
+    <string name="ems_mode_auto">Automatic</string>
+    <string name="ems_mode_manual">Manual</string>
+    <string name="manual_dialog_title">Switch to manual?</string>
+    <string name="manual_dialog_body">The EMS stops steering the battery, charger and heat pump, and hands the battery back to the inverter. You become responsible for control.</string>
+    <string name="manual_dialog_confirm">Switch to manual</string>
+
+    <!-- charger controls -->
+    <string name="charger_mode_label">MODE</string>
+    <string name="charger_mode_solar">Solar surplus</string>
+    <string name="charger_mode_fixed">Fixed power</string>
+    <string name="charger_fixed_current">Fixed current</string>
+    <string name="charger_amps">%1$d A</string>
+    <string name="charger_manual_note">EMS is in manual mode — only fixed power applies to the charger.</string>
+    <string name="charger_control_unavailable">Charger control unavailable — check credentials in Settings.</string>
+    <string name="charger_start">START CHARGING</string>
+    <string name="charger_stop">STOP CHARGING</string>
+
+    <!-- charger hero -->
+    <string name="charger_value_no_car">No car</string>
+    <string name="charger_charging">Charging</string>
+    <string name="charger_value_idle">Idle</string>
+    <string name="charger_status_no_car">No car connected</string>
+    <string name="charger_status_connected_idle">Connected — not charging</string>
+    <string name="charger_status_online">Charger online</string>
+    <string name="charger_status_unavailable">Status unavailable</string>
+    <string name="cd_charger">Charger</string>
+    <string name="cd_car">Car</string>
+    <string name="cd_charging">Charging</string>
+
+    <!-- device status -->
+    <string name="status_online">Online</string>
+    <string name="status_offline">Offline</string>
+    <string name="status_no_data">No data</string>
+    <string name="heatpump_no_controls">No controls available — the server exposes heat-pump status only.</string>
+
+    <!-- energy flow diagram -->
+    <string name="flow_solar">Solar</string>
+    <string name="flow_home">Home</string>
+    <string name="flow_grid_export">Grid · export</string>
+    <string name="flow_grid_import">Grid · import</string>
+    <string name="flow_battery">Battery</string>
+    <string name="flow_battery_soc">Battery · %1$d%%</string>
+
+    <!-- overview -->
+    <string name="overview_waiting">Waiting for data…</string>
+    <string name="overview_devices">DEVICES</string>
+
+    <!-- settings -->
+    <string name="settings_server">Server address</string>
+    <string name="settings_server_hint">ems.kenas.be or 10.0.2.2:8080</string>
+    <string name="settings_username">Username</string>
+    <string name="settings_password">Password</string>
+    <string name="settings_edge_key">Edge key (X-EMS-Edge-Key)</string>
+    <string name="settings_use_tls">Use TLS (wss)</string>
 </resources>

@@ -25,8 +25,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import io.konektis.ems.R
 import io.konektis.ems.data.settings.Settings
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,10 +43,10 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text("Settings") },
+            title = { Text(stringResource(R.string.settings_title)) },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                 }
             }
         )
@@ -55,27 +57,27 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
             OutlinedTextField(
                 value = serverUrl,
                 onValueChange = { serverUrl = it },
-                label = { Text("Server address") },
-                placeholder = { Text("ems.kenas.be or 10.0.2.2:8080") },
+                label = { Text(stringResource(R.string.settings_server)) },
+                placeholder = { Text(stringResource(R.string.settings_server_hint)) },
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
                 value = username,
                 onValueChange = { username = it },
-                label = { Text("Username") },
+                label = { Text(stringResource(R.string.settings_username)) },
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
-                label = { Text("Password") },
+                label = { Text(stringResource(R.string.settings_password)) },
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
                 value = edgeKey,
                 onValueChange = { edgeKey = it },
-                label = { Text("Edge key (X-EMS-Edge-Key)") },
+                label = { Text(stringResource(R.string.settings_edge_key)) },
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -83,7 +85,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Use TLS (wss)")
+                Text(stringResource(R.string.settings_use_tls))
                 Spacer(Modifier.weight(1f))
                 Switch(checked = useTls, onCheckedChange = { useTls = it })
             }
@@ -101,7 +103,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit) {
                     onBack()
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("Save") }
+            ) { Text(stringResource(R.string.action_save)) }
         }
     }
 }

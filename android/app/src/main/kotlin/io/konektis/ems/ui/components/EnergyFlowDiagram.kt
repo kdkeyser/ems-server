@@ -27,7 +27,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
+import io.konektis.ems.R
 import io.konektis.ems.data.model.StatusState
 import io.konektis.ems.ui.theme.LocalEmsColors
 import io.konektis.ems.ui.theme.powerColor
@@ -100,13 +102,13 @@ fun EnergyFlowDiagram(state: StatusState?, modifier: Modifier = Modifier) {
         }
 
         // Tiles (icon + name inside) centered on their anchors.
-        NodeTile(EmsIcons.Solar, "Solar", NODE_W, NODE_H, ems.tileBg, SOLAR_X, SOLAR_Y, wDp, hDp)
-        NodeTile(EmsIcons.House, "Home", HOUSE_W, HOUSE_H, ems.houseTileBg, HOUSE_X, ROW_Y, wDp, hDp)
+        NodeTile(EmsIcons.Solar, stringResource(R.string.flow_solar), NODE_W, NODE_H, ems.tileBg, SOLAR_X, SOLAR_Y, wDp, hDp)
+        NodeTile(EmsIcons.House, stringResource(R.string.flow_home), HOUSE_W, HOUSE_H, ems.houseTileBg, HOUSE_X, ROW_Y, wDp, hDp)
         NodeTile(EmsIcons.Grid,
-            if ((state?.gridW ?: 0) < 0) "Grid · export" else "Grid · import",
+            if ((state?.gridW ?: 0) < 0) stringResource(R.string.flow_grid_export) else stringResource(R.string.flow_grid_import),
             NODE_W, NODE_H, ems.tileBg, GRID_X, ROW_Y, wDp, hDp)
         NodeTile(EmsIcons.Battery,
-            state?.batteryCharge?.let { "Battery · $it%" } ?: "Battery",
+            state?.batteryCharge?.let { stringResource(R.string.flow_battery_soc, it) } ?: stringResource(R.string.flow_battery),
             NODE_W, NODE_H, ems.tileBg, BATTERY_X, ROW_Y, wDp, hDp)
 
         // Power values, below each tile.

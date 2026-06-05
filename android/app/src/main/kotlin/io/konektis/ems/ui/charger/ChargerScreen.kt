@@ -26,9 +26,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.konektis.ems.R
 import io.konektis.ems.data.ControlState
 import io.konektis.ems.data.model.ChargerControl
 import io.konektis.ems.data.model.ChargerMode
@@ -72,7 +74,7 @@ fun ChargerScreen(
                 )
             } else {
                 Text(
-                    "Charger control unavailable — check credentials in Settings.",
+                    stringResource(R.string.charger_control_unavailable),
                     fontSize = 14.sp,
                     color = ems.idle,
                 )
@@ -96,24 +98,24 @@ private fun ChargerControls(
     }
     var fixedAmps by remember(control) { mutableIntStateOf(control.fixedAmps.coerceIn(6, 32)) }
 
-    Text("MODE", style = MaterialTheme.typography.labelSmall, color = ems.idle)
+    Text(stringResource(R.string.charger_mode_label), style = MaterialTheme.typography.labelSmall, color = ems.idle)
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
         SegmentedButton(
             selected = selectedMode == ChargerMode.SOLAR,
             enabled = solarAllowed,
             onClick = { selectedMode = ChargerMode.SOLAR },
             shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-        ) { Text("Solar surplus") }
+        ) { Text(stringResource(R.string.charger_mode_solar)) }
         SegmentedButton(
             selected = selectedMode == ChargerMode.FIXED,
             onClick = { selectedMode = ChargerMode.FIXED },
             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-        ) { Text("Fixed power") }
+        ) { Text(stringResource(R.string.charger_mode_fixed)) }
     }
 
     if (!solarAllowed) {
         Text(
-            "EMS is in manual mode — only fixed power applies to the charger.",
+            stringResource(R.string.charger_manual_note),
             fontSize = 12.sp,
             color = ems.idle,
         )
@@ -127,8 +129,8 @@ private fun ChargerControls(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Fixed current", style = MaterialTheme.typography.labelSmall, color = ems.idle)
-                    Text("$fixedAmps A", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.charger_fixed_current), style = MaterialTheme.typography.labelSmall, color = ems.idle)
+                    Text(stringResource(R.string.charger_amps, fixedAmps), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Slider(
                     value = fixedAmps.toFloat(),
@@ -141,8 +143,8 @@ private fun ChargerControls(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("6 A", fontSize = 11.sp, color = ems.idle)
-                    Text("32 A", fontSize = 11.sp, color = ems.idle)
+                    Text(stringResource(R.string.charger_amps, 6), fontSize = 11.sp, color = ems.idle)
+                    Text(stringResource(R.string.charger_amps, 32), fontSize = 11.sp, color = ems.idle)
                 }
             }
         }
@@ -161,7 +163,7 @@ private fun ChargerControls(
         ),
     ) {
         Text(
-            if (isCharging) "STOP CHARGING" else "START CHARGING",
+            if (isCharging) stringResource(R.string.charger_stop) else stringResource(R.string.charger_start),
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
         )

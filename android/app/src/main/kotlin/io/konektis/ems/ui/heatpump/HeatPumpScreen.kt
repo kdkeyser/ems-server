@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.konektis.ems.R
 import io.konektis.ems.data.model.DeviceHealth
 import io.konektis.ems.data.model.StatusState
 import io.konektis.ems.ui.components.EmsIcons
@@ -35,14 +37,14 @@ fun HeatPumpScreen(state: StatusState?, modifier: Modifier = Modifier) {
             value = if (online) formatWatts(powerW) else "—",
             valueColor = if (online) ems.consumption else ems.idle,
             statusText = when (health) {
-                is DeviceHealth.Online -> "Online" + (health.extraInfo?.let { " · $it" } ?: "")
-                is DeviceHealth.Offline -> health.lastError?.let { "Offline · $it" } ?: "Offline"
-                null -> "No data"
+                is DeviceHealth.Online -> stringResource(R.string.status_online) + (health.extraInfo?.let { " · $it" } ?: "")
+                is DeviceHealth.Offline -> health.lastError?.let { "${stringResource(R.string.status_offline)} · $it" } ?: stringResource(R.string.status_offline)
+                null -> stringResource(R.string.status_no_data)
             },
             online = online,
         )
         Text(
-            "No controls available — the server exposes heat-pump status only.",
+            stringResource(R.string.heatpump_no_controls),
             fontSize = 12.sp,
             color = ems.idle,
             modifier = Modifier.padding(horizontal = 4.dp),

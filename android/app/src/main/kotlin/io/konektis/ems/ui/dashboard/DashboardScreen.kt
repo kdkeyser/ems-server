@@ -43,13 +43,16 @@ import io.konektis.ems.ui.components.EmsIcons
 import io.konektis.ems.ui.heatpump.HeatPumpScreen
 import io.konektis.ems.ui.overview.OverviewScreen
 import io.konektis.ems.ui.theme.LocalEmsColors
+import androidx.annotation.StringRes
+import androidx.compose.ui.res.stringResource
+import io.konektis.ems.R
 
-private data class TabItem(val label: String, val icon: ImageVector)
+private data class TabItem(@StringRes val labelRes: Int, val icon: ImageVector)
 
 private val tabs = listOf(
-    TabItem("Overview", EmsIcons.House),
-    TabItem("Charger", EmsIcons.Charger),
-    TabItem("Heat Pump", EmsIcons.HeatPump),
+    TabItem(R.string.tab_overview, EmsIcons.House),
+    TabItem(R.string.tab_charger, EmsIcons.Charger),
+    TabItem(R.string.tab_heatpump, EmsIcons.HeatPump),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,9 +70,10 @@ fun DashboardScreen(
 
     val statusBanner: Pair<Color, String>? = when (connectionState) {
         is ConnectionState.Connected -> null
-        is ConnectionState.Connecting -> Color(0xFFFBBF24) to "Connecting…"
+        is ConnectionState.Connecting -> Color(0xFFFBBF24) to stringResource(R.string.conn_connecting)
         is ConnectionState.Disconnected ->
-            Color(0xFFF87171) to "Disconnected${connectionState.error?.let { " — $it" } ?: ""}"
+            Color(0xFFF87171) to (stringResource(R.string.conn_disconnected) +
+                (connectionState.error?.let { " — $it" } ?: ""))
     }
 
     Scaffold(
@@ -78,7 +82,7 @@ fun DashboardScreen(
                 title = { Text("EMS") },
                 actions = {
                     IconButton(onClick = onSettingsClick) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings_title))
                     }
                 }
             )
@@ -86,9 +90,10 @@ fun DashboardScreen(
         bottomBar = {
             NavigationBar {
                 tabs.forEachIndexed { index, tab ->
+                    val label = stringResource(tab.labelRes)
                     NavigationBarItem(
-                        icon = { Icon(tab.icon, contentDescription = tab.label) },
-                        label = { Text(tab.label) },
+                        icon = { Icon(tab.icon, contentDescription = label) },
+                        label = { Text(label) },
                         selected = selectedTab == index,
                         onClick = { selectedTab = index }
                     )
@@ -157,17 +162,17 @@ private fun ModeCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text("EMS MODE", style = MaterialTheme.typography.labelSmall, color = ems.idle)
+                Text(stringResource(R.string.ems_mode_label), style = MaterialTheme.typography.labelSmall, color = ems.idle)
                 val subtitle = when {
-                    !authenticated -> "Authenticate in Settings to change mode"
-                    mode == null -> "Waiting for mode…"
-                    mode == ManagerMode.AUTO -> "Automatic — EMS optimises power"
-                    else -> "Manual — devices left to their own control"
+                    !authenticated -> stringResource(R.string.ems_mode_auth_hint)
+                    mode == null -> stringResource(R.string.ems_mode_waiting)
+                    mode == ManagerMode.AUTO -> stringResource(R.string.ems_mode_auto_subtitle)
+                    else -> stringResource(R.string.ems_mode_manual_subtitle)
                 }
                 Text(
                     when (mode) {
-                        ManagerMode.AUTO -> "Automatic"
-                        ManagerMode.MANUAL -> "Manual"
+                        ManagerMode.AUTO -> stringResource(R.string.ems_mode_auto)
+                        ManagerMode.MANUAL -> stringResource(R.string.ems_mode_manual)
                         null -> "—"
                     },
                     fontSize = 18.sp,
@@ -188,21 +193,18 @@ private fun ModeCard(
     if (confirmManual) {
         AlertDialog(
             onDismissRequest = { confirmManual = false },
-            title = { Text("Switch to manual?") },
+            title = { Text(stringResource(R.string.manual_dialog_title)) },
             text = {
-                Text(
-                    "The EMS stops steering the battery, charger and heat pump, and hands the " +
-                        "battery back to the inverter. You become responsible for control."
-                )
+                Text(stringResource(R.string.manual_dialog_body))
             },
             confirmButton = {
                 TextButton(onClick = {
                     confirmManual = false
                     onSetMode(ManagerMode.MANUAL)
-                }) { Text("Switch to manual") }
+                }) { Text(stringResource(R.string.manual_dialog_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmManual = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmManual = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }

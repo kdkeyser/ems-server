@@ -25,4 +25,11 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onStart() {
+        super.onStart()
+        val app = application as EmsApplication
+        app.component.statusWsClient.reconnectNow()
+        app.component.controlWsClient.reconnectNow()
+    }
 }

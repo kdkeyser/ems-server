@@ -158,8 +158,15 @@ class OcppService(
     suspend fun handleStopTransaction(chargePointId: String, request: StopTransactionRequest): StopTransactionResponse {
         val s = sessions[chargePointId]
         val tx = s?.activeTransactions?.remove(request.transactionId)
+        // Clear the connector's live transaction whether or not we recorded its start: a transaction
+        // recovered from MeterValues (server restarted mid-charge) has no ActiveTransaction entry but
+        // still set currentTransactionId, and must be cleared so a fresh session can start later.
+        val connectorId = tx?.connectorId
+            ?: s?.connectors?.values?.firstOrNull { it.currentTransactionId == request.transactionId }?.connectorId
+        if (connectorId != null) {
+            s?.connectors?.get(connectorId)?.apply { currentTransactionId = null; status = ChargePointStatus.Available }
+        }
         if (tx != null) {
-            s.connectors[tx.connectorId]?.apply { currentTransactionId = null; status = ChargePointStatus.Available }
             transactions.record(
                 transactionId = tx.transactionId, chargePointId = chargePointId, connectorId = tx.connectorId,
                 idTag = tx.idTag, meterStart = tx.meterStart, meterStop = request.meterStop,
@@ -180,16 +187,26 @@ class OcppService(
     }
 
     suspend fun handleMeterValues(chargePointId: String, request: MeterValuesRequest): MeterValuesResponse {
+        val s = sessions[chargePointId]
+        val connector = s?.connectors?.getOrPut(request.connectorId) { ConnectorState(request.connectorId) }
+
+        // Recover a transaction the charger never re-announced: when it was already running while this
+        // server (re)started or the socket reconnected, StartTransaction is not replayed, but MeterValues
+        // still carry the id. Without this, currentTransactionId stays null and the EMS keeps (uselessly)
+        // retrying RemoteStartTransaction — rejected by the charger — while the car charges fine.
+        request.transactionId?.let { txId ->
+            if (connector != null && connector.currentTransactionId != txId) connector.currentTransactionId = txId
+        }
+
         val powerW = extractActivePowerW(request)
         if (powerW != null) {
-            val s = sessions[chargePointId]
-            s?.connectors?.getOrPut(request.connectorId) { ConnectorState(request.connectorId) }?.lastPowerW = powerW
+            connector?.lastPowerW = powerW
             if (s != null && !s.powerImportSeen) {
                 s.powerImportSeen = true
                 chargePoints.setPowerImportSeen(chargePointId, true)
             }
-            recomputeState()
         }
+        recomputeState()
         return MeterValuesResponse()
     }
 

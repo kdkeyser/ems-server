@@ -111,6 +111,35 @@ class OcppServiceTest {
     }
 
     @Test
+    fun meterValuesRecoverTransactionIdWhenStartWasMissed() = runTest {
+        // A transaction already running when this server (re)started: no StartTransaction is replayed,
+        // but MeterValues still carry the id. The live state must adopt it.
+        val svc = newService()
+        svc.registerSession("CP1", mockk(relaxed = true))
+        assertNull(svc.activeTransactionId("CP1", 1))
+
+        svc.handleMeterValues("CP1", MeterValuesRequest(connectorId = 1, transactionId = 77, meterValue = listOf(
+            MeterValue("t", listOf(SampledValue(value = "2300", measurand = Measurand.PowerActiveImport, unit = UnitOfMeasure.W))))))
+
+        assertEquals(77, svc.activeTransactionId("CP1", 1))
+    }
+
+    @Test
+    fun stopClearsRecoveredTransactionWithNoRecordedStart() = runTest {
+        val svc = newService()
+        svc.registerSession("CP1", mockk(relaxed = true))
+        svc.handleMeterValues("CP1", MeterValuesRequest(connectorId = 1, transactionId = 77, meterValue = emptyList()))
+        assertEquals(77, svc.activeTransactionId("CP1", 1))
+
+        svc.handleStopTransaction("CP1",
+            StopTransactionRequest(transactionId = 77, timestamp = "2026-01-01T01:00:00Z", meterStop = 1000))
+
+        assertNull(svc.activeTransactionId("CP1", 1))
+        // We never saw its start, so there is nothing to record in history.
+        assertEquals(0, svc.recentTransactions(10).size)
+    }
+
+    @Test
     fun authorizeRejectsBlankIdTag() = runTest {
         val svc = newService(acceptTags = true)
         svc.registerSession("CP1", mockk(relaxed = true))

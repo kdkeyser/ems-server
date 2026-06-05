@@ -117,6 +117,7 @@ fun ChargerHero(uiState: ChargerUiState, chargerW: Int?, modifier: Modifier = Mo
         uiState == ChargerUiState.NO_CAR -> "No car"
         isCharging && chargerW != null -> formatWatts(chargerW)
         isCharging -> "Charging"
+        uiState == ChargerUiState.CONTROLS_FALLBACK && chargerW != null -> formatWatts(chargerW)
         else -> "Idle"
     }
     val statusText = when (uiState) {

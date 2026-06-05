@@ -62,6 +62,8 @@ fun Application.configureOcppWebUi(service: OcppService, energyManager: EnergyMa
                 call.respondText(json.encodeToString(service.recentTransactions(50)), ContentType.Application.Json)
             }
 
+            // Single configured charger: the {id} is accepted for URL symmetry but the control is
+            // global (EnergyManager owns one ChargerControl). Multi-charger is out of scope.
             get("/chargepoints/{id}/charger-control") {
                 call.respondText(json.encodeToString(energyManager.chargerControlFlow.value), ContentType.Application.Json)
             }

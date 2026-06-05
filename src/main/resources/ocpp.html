@@ -135,9 +135,13 @@ function createCard(id) {
   modeSelect.innerHTML = '<option value="SOLAR">Solar surplus</option><option value="FIXED">Fixed power</option>';
   const fixedA = document.createElement('input');
   fixedA.type = 'number'; fixedA.min = '0'; fixedA.style.width = '64px';
+  const ccCharging = document.createElement('input');
+  ccCharging.type = 'checkbox';
+  const ccChargingLabel = document.createElement('label');
+  ccChargingLabel.append(ccCharging, document.createTextNode(' Charging'));
   const ccLabel = document.createElement('span');
   ccLabel.className = 'muted';
-  ccLabel.append(document.createTextNode('Mode '), modeSelect, document.createTextNode(' Fixed A '), fixedA);
+  ccLabel.append(document.createTextNode('Mode '), modeSelect, document.createTextNode(' Fixed A '), fixedA, document.createTextNode(' '), ccChargingLabel);
   const ccSave = document.createElement('button');
   ccSave.textContent = 'Apply';
   ccSave.addEventListener('click', () => saveChargerControl(id));
@@ -145,7 +149,7 @@ function createCard(id) {
 
   div.append(headRow, meta, connectors, controlModeRow, actionRow, controlRow);
 
-  const entry = { card: div, refs: { scPill, prPill, meta, connectors, modeSelect, fixedA, ampsInput, connInput, stopBtn } };
+  const entry = { card: div, refs: { scPill, prPill, meta, connectors, modeSelect, fixedA, ccCharging, ampsInput, connInput, stopBtn } };
   cards[id] = entry;
   return entry;
 }
@@ -295,18 +299,20 @@ async function loadChargerControl(id) {
   const entry = cards[id];
   if (!entry || !r.ok) return;
   const c = await r.json();
-  const { modeSelect, fixedA } = entry.refs;
+  const { modeSelect, fixedA, ccCharging } = entry.refs;
   if (document.activeElement !== modeSelect) modeSelect.value = c.mode;
   if (document.activeElement !== fixedA) fixedA.value = c.fixedAmps;
+  if (document.activeElement !== ccCharging) ccCharging.checked = c.charging;
 }
 async function saveChargerControl(id) {
   const entry = cards[id];
   if (!entry) return;
   const mode = entry.refs.modeSelect.value;
   const fixedAmps = parseInt(entry.refs.fixedA.value, 10) || 0;
+  const charging = entry.refs.ccCharging.checked;
   const r = await api('/chargepoints/' + id + '/charger-control', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode, fixedAmps, charging: true }),
+    body: JSON.stringify({ mode, fixedAmps, charging }),
   });
   if (!r.ok) alert('Apply failed — charger offline.');
 }

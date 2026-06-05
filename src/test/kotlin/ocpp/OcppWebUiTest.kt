@@ -57,6 +57,20 @@ class OcppWebUiTest {
     }
 
     @Test
+    fun chargerControlRoundTripOverHttp() = testApplication {
+        application { testModule() }
+        val post = client.post("/ocpp-ui/api/chargepoints/CP1/charger-control") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"mode":"FIXED","fixedAmps":20,"charging":false}""")
+        }
+        assertEquals(HttpStatusCode.OK, post.status)
+        val body = client.get("/ocpp-ui/api/chargepoints/CP1/charger-control").bodyAsText()
+        assertTrue(body.contains("FIXED"))
+        assertTrue(body.contains("20"))
+        assertTrue(body.contains("false"))
+    }
+
+    @Test
     fun acceptChargePoint() = testApplication {
         lateinit var svc: OcppService
         application { svc = testModule() }

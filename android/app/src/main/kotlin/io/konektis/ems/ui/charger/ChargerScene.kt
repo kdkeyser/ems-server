@@ -32,6 +32,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.konektis.ems.R
+import io.konektis.ems.data.model.ChargerControl
+import io.konektis.ems.data.model.ChargerMode
 import io.konektis.ems.ui.components.EmsIcons
 import io.konektis.ems.ui.components.formatWatts
 import io.konektis.ems.ui.theme.LocalEmsColors
@@ -56,6 +58,15 @@ fun chargerSceneSpec(uiState: ChargerUiState, sessionActive: Boolean): ChargerSc
 /** Start/Stop button appearance, derived from the session intent and any in-flight press. */
 enum class ChargerButtonLabel { START, STOP, STARTING, STOPPING }
 data class ChargerButtonState(val label: ChargerButtonLabel, val enabled: Boolean, val stopStyle: Boolean)
+
+/**
+ * What to send when the user changes the mode or fixed-amps while the charger screen is open.
+ * The EMS applies [ChargerControl] live every tick, so an edit during an active session must be
+ * pushed (keeping it on) to retarget the running session; when no session is active the edit only
+ * stages locally and is sent on Start. Returns the control to send, or null to stage only.
+ */
+fun liveChargingUpdate(sessionActive: Boolean, mode: ChargerMode, fixedAmps: Int): ChargerControl? =
+    if (sessionActive) ChargerControl(mode = mode, fixedAmps = fixedAmps, charging = true) else null
 
 /** pending: true = starting, false = stopping, null = settled. */
 fun chargerButtonState(sessionActive: Boolean, pending: Boolean?): ChargerButtonState = when (pending) {

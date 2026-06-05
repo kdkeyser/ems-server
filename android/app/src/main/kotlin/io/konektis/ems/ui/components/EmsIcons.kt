@@ -3,6 +3,7 @@ package io.konektis.ems.ui.components
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.EvStation
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.SolarPower
@@ -17,6 +18,8 @@ object EmsIcons {
     val Battery: ImageVector = Icons.Filled.BatteryChargingFull
     val Charger: ImageVector = Icons.Filled.EvStation
     val HeatPump: ImageVector = Icons.Filled.Thermostat
+    val Car: ImageVector = Icons.Filled.DirectionsCar
+    val Charging: ImageVector = Icons.Filled.Bolt
 }
 
 /** Maps a device's `category` string (from StatusState) to an icon; falls back to Bolt. */

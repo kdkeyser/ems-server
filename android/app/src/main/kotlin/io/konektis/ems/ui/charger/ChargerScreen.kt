@@ -3,15 +3,19 @@ package io.konektis.ems.ui.charger
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -19,6 +23,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +43,7 @@ import io.konektis.ems.data.model.ManagerMode
 import io.konektis.ems.data.model.StatusState
 import io.konektis.ems.data.model.parseChargerConnection
 import io.konektis.ems.ui.theme.LocalEmsColors
+import kotlinx.coroutines.delay
 
 @Composable
 fun ChargerScreen(
@@ -53,7 +59,6 @@ fun ChargerScreen(
     val connection = parseChargerConnection(statusState?.chargerConnection)
     val uiState = chargerUiState(connection)
     val isAuthenticated = controlState is ControlState.Authenticated
-    val isCharging = uiState == ChargerUiState.CHARGING
 
     Column(
         modifier = modifier
@@ -62,12 +67,15 @@ fun ChargerScreen(
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        ChargerHero(uiState = uiState, chargerW = chargerW)
+        ChargerHero(
+            uiState = uiState,
+            chargerW = chargerW,
+            sessionActive = chargerControl?.charging ?: false,
+        )
 
         if (uiState != ChargerUiState.NO_CAR) {
             if (isAuthenticated && chargerControl != null) {
                 ChargerControls(
-                    isCharging = isCharging,
                     control = chargerControl,
                     mode = mode,
                     onSetCharging = onSetCharging,
@@ -85,18 +93,29 @@ fun ChargerScreen(
 
 @Composable
 private fun ChargerControls(
-    isCharging: Boolean,
     control: ChargerControl,
     mode: ManagerMode?,
     onSetCharging: (ChargerControl) -> Unit,
 ) {
     val ems = LocalEmsColors.current
+    val sessionActive = control.charging
     // EMS MANUAL makes solar surplus meaningless -> force Fixed.
     val solarAllowed = mode != ManagerMode.MANUAL
     var selectedMode by remember(control, mode) {
         mutableStateOf(if (control.mode == ChargerMode.SOLAR && solarAllowed) ChargerMode.SOLAR else ChargerMode.FIXED)
     }
     var fixedAmps by remember(control) { mutableIntStateOf(control.fixedAmps.coerceIn(6, 32)) }
+
+    // pending: true = starting, false = stopping, null = settled.
+    var pending by remember { mutableStateOf<Boolean?>(null) }
+    // Clear pending once the server-echoed session reaches the pressed target.
+    LaunchedEffect(sessionActive, pending) {
+        if (pending != null && pending == sessionActive) pending = null
+    }
+    // Safety timeout so the spinner can't hang if the session never flips.
+    LaunchedEffect(pending) {
+        if (pending != null) { delay(30_000); pending = null }
+    }
 
     Text(stringResource(R.string.charger_mode_label), style = MaterialTheme.typography.labelSmall, color = ems.idle)
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -114,11 +133,7 @@ private fun ChargerControls(
     }
 
     if (!solarAllowed) {
-        Text(
-            stringResource(R.string.charger_manual_note),
-            fontSize = 12.sp,
-            color = ems.idle,
-        )
+        Text(stringResource(R.string.charger_manual_note), fontSize = 12.sp, color = ems.idle)
     }
 
     if (selectedMode == ChargerMode.FIXED) {
@@ -150,22 +165,34 @@ private fun ChargerControls(
         }
     }
 
+    val btn = chargerButtonState(sessionActive, pending)
+    val label = when (btn.label) {
+        ChargerButtonLabel.START -> stringResource(R.string.charger_start)
+        ChargerButtonLabel.STOP -> stringResource(R.string.charger_stop)
+        ChargerButtonLabel.STARTING -> stringResource(R.string.charger_starting)
+        ChargerButtonLabel.STOPPING -> stringResource(R.string.charger_stopping)
+    }
     Button(
         onClick = {
-            onSetCharging(
-                ChargerControl(mode = selectedMode, fixedAmps = fixedAmps, charging = !isCharging)
-            )
+            val target = !sessionActive
+            pending = target
+            onSetCharging(ChargerControl(mode = selectedMode, fixedAmps = fixedAmps, charging = target))
         },
+        enabled = btn.enabled,
         modifier = Modifier.fillMaxWidth().height(56.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (isCharging) MaterialTheme.colorScheme.error
+            containerColor = if (btn.stopStyle) MaterialTheme.colorScheme.error
                              else MaterialTheme.colorScheme.primary,
         ),
     ) {
-        Text(
-            if (isCharging) stringResource(R.string.charger_stop) else stringResource(R.string.charger_start),
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-        )
+        if (!btn.enabled) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.onPrimary,
+            )
+            Spacer(Modifier.width(10.dp))
+        }
+        Text(label, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 }

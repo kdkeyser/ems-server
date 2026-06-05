@@ -39,6 +39,10 @@
     <string name="charger_control_unavailable">Charger control unavailable — check credentials in Settings.</string>
     <string name="charger_start">START CHARGING</string>
     <string name="charger_stop">STOP CHARGING</string>
+    <string name="charger_starting">Starting…</string>
+    <string name="charger_stopping">Stopping…</string>
+    <string name="charger_value_ready">Ready</string>
+    <string name="charger_status_session_not_drawing">Session active — car not drawing</string>
 
     <!-- charger hero -->
     <string name="charger_value_no_car">No car</string>

@@ -25,6 +25,7 @@ class OcppChargerTest {
         val svc = mockk<OcppService>()
         every { svc.latestPowerW("CP1", 1) } returns 2300
         every { svc.connectorStatus("CP1", 1) } returns null
+        every { svc.activeTransactionId("CP1", 1) } returns 99 // session open: live reading is trusted
         val charger = OcppCharger("CP1", 1, svc)
         charger.update()
         assertEquals(2300, charger.getState()?.update?.currentPower?.value)
@@ -49,6 +50,7 @@ class OcppChargerTest {
         val svc = mockk<OcppService>()
         every { svc.latestPowerW("CP1", 1) } returns null
         every { svc.connectorStatus("CP1", 1) } returns ChargePointStatus.Preparing
+        every { svc.activeTransactionId("CP1", 1) } returns null
         val charger = OcppCharger("CP1", 1, svc)
         charger.update()
         val state = charger.getState()
@@ -61,11 +63,24 @@ class OcppChargerTest {
         val svc = mockk<OcppService>()
         every { svc.latestPowerW("CP1", 1) } returns 7000
         every { svc.connectorStatus("CP1", 1) } returns ChargePointStatus.Charging
+        every { svc.activeTransactionId("CP1", 1) } returns 7 // session open: live reading is trusted
         val charger = OcppCharger("CP1", 1, svc)
         charger.update()
         val state = charger.getState()
         assertEquals(7000, state?.update?.currentPower?.value)
         assertEquals(ChargerConnection.Charging, state?.update?.connection)
+    }
+
+    @Test
+    fun `getState reports zero power when no transaction is active even if a stale reading remains`() = runTest {
+        val svc = mockk<OcppService>()
+        every { svc.latestPowerW("CP1", 1) } returns 7000 // stale value left over from the finished session
+        every { svc.connectorStatus("CP1", 1) } returns ChargePointStatus.Finishing
+        every { svc.activeTransactionId("CP1", 1) } returns null // session ended: no open transaction
+        val charger = OcppCharger("CP1", 1, svc)
+        val state = charger.getState()
+        assertEquals(0, state?.update?.currentPower?.value)
+        assertEquals(ChargerConnection.Connected, state?.update?.connection)
     }
 
     @Test

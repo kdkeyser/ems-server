@@ -45,14 +45,18 @@ class OcppCharger(
     }
 
     override suspend fun getState(): DeviceUpdate<ChargerState>? {
-        val powerW = service.latestPowerW(chargePointId, connectorId)
+        val rawPowerW = service.latestPowerW(chargePointId, connectorId)
         val connection = chargerConnectionFrom(service.connectorStatus(chargePointId, connectorId))
         // Return a state when we know either the power or the connection; only bail when both are absent
         // (so a connected-but-idle car still surfaces before any MeterValue arrives).
-        if (powerW == null && connection == ChargerConnection.Unknown) return null
+        if (rawPowerW == null && connection == ChargerConnection.Unknown) return null
+        // The charger only pushes MeterValues during an open transaction, so latestPowerW goes stale the
+        // moment a session ends. With no transaction the charger draws nothing — report 0 W instead of the
+        // last seen value, which would otherwise linger on the app's main screen after charging stops.
+        val powerW = if (service.activeTransactionId(chargePointId, connectorId) != null) rawPowerW ?: 0 else 0
         return DeviceUpdate(
             GlobalTimeSource.source.markNow(),
-            ChargerState(Watt(powerW ?: 0), connection)
+            ChargerState(Watt(powerW), connection)
         )
     }
 

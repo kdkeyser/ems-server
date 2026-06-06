@@ -1,7 +1,7 @@
 # BMW CarData — car State-of-Charge display
 
 **Date:** 2026-06-06
-**Status:** Design approved, spec under review
+**Status:** Server implemented (2026-06-06); pending live device-code bring-up, payload-shape confirmation, and the Android app companion.
 **Scope:** Server (`ems-server`) end-to-end + a companion render task in the separate Android app repo.
 
 ## Problem

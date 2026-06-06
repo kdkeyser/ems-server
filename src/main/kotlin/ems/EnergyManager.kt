@@ -1,6 +1,7 @@
 package io.konektis.ems
 
 import io.klogging.Klogging
+import io.konektis.cardata.CarDataService
 import io.konektis.ChargerControl
 import io.konektis.ChargerMode
 import io.konektis.ManagerMode
@@ -25,6 +26,7 @@ class EnergyManager(
     private val config: Config,
     private val strategy: Strategy,
     private val chargerControlStore: ChargerControlStore,
+    private val carDataService: CarDataService? = null,
 ) : Klogging {
 
     // setMode() is called from the WebSocket coroutine; tick() reads mode from the run() loop.
@@ -36,6 +38,9 @@ class EnergyManager(
 
     val emsStateFlow = MutableStateFlow(EMSState(null, null, null, null, null, null, null))
     val modeFlow = MutableStateFlow(ManagerMode.AUTO)
+
+    /** Latest car SoC (%) for the socket to push; a constant null flow when CarData is disabled. */
+    val carSocFlow: StateFlow<Int?> = carDataService?.socFlow ?: MutableStateFlow<Int?>(null)
 
     private val chargerKey: String? =
         config.devices.charger.firstOrNull()?.let { it.chargePointId ?: it.name }
@@ -172,7 +177,8 @@ class EnergyManager(
             solarPower = solarPower,
             batteryPower = batteryState?.power?.value,
             batteryCharge = batteryState?.charge?.toInt(),
-            chargerConnection = chargerState?.connection
+            chargerConnection = chargerState?.connection,
+            carCharge = carDataService?.socFlow?.value,
         )
     }
 

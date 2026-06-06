@@ -6,6 +6,16 @@ ocpp:
 database:
   path: ems.db
 
+cardata:
+  enabled: false
+  clientId: ""            # generated in the BMW CarData portal (CARDATA API)
+  vin: ""                 # the vehicle to subscribe to
+  # HV-battery charge in %, as displayed in the car (BMW i5). Enable this descriptor in the
+  # portal under "Configure data stream".
+  socDescriptor: "vehicle.powertrain.electric.battery.stateOfCharge.displayed"
+  # brokerHost / brokerPort default to BMW's customer streaming broker
+  #   (customer.streaming-cardata.bmwgroup.com:9000). See docs/adding-bmw-cardata.md.
+
 websocket:
   username: user
   password: password

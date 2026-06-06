@@ -1,6 +1,7 @@
 package io.konektis.di
 
 import io.konektis.DataCollector
+import io.konektis.cardata.CarDataService
 import io.konektis.config.Config
 import io.konektis.devices.World
 import io.konektis.ems.EnergyManager
@@ -21,6 +22,7 @@ abstract class AppComponent(
     abstract val energyManager: EnergyManager
     abstract val database: Database
     abstract val ocppService: OcppService
+    abstract val carDataService: CarDataService
 
     companion object
 }

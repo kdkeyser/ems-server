@@ -2,7 +2,7 @@
 exposed = "0.61.0"
 h2 = "2.3.232"
 kotlin = "2.2.20"
-ktor = "3.3.1"
+ktor = "3.4.2"
 log4j = "2.23.1"
 bitops = "0.2.0"
 hoplite = "2.9.0"
@@ -10,6 +10,7 @@ klogging = "0.11.6"
 shadow = "8.3.3"
 kotlin-inject = "0.8.0"
 ksp = "2.2.20-2.0.3"
+ktor-mqtt = "1.1.0"
 
 [libraries]
 ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
@@ -36,6 +37,8 @@ ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.re
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor"}
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version = "1.8.1"}
 modbus-tcp = { module = "com.digitalpetri.modbus:modbus-tcp", version = "2.1.0"}
+ktor-mqtt-client = { module = "de.kempmobil.ktor.mqtt:mqtt-client", version.ref = "ktor-mqtt" }
+ktor-mqtt-core = { module = "de.kempmobil.ktor.mqtt:mqtt-core", version.ref = "ktor-mqtt" }
 klogging-jvm = { module = "io.klogging:klogging-jvm", version = "0.9.4"}
 bits = { module = "org.kotlincrypto.bitops:bits", version.ref = "bitops"}
 endian = { module = "org.kotlincrypto.bitops:endian", version.ref = "bitops"}

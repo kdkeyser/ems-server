@@ -1,6 +1,11 @@
 package io.konektis.di
 
 import io.konektis.DataCollector
+import io.konektis.cardata.CarDataAuth
+import io.konektis.cardata.CarDataMqttClient
+import io.konektis.cardata.CarDataService
+import io.konektis.cardata.CarDataTokenStore
+import io.konektis.cardata.SqlCarDataTokenStore
 import io.konektis.config.Config
 import io.konektis.devices.World
 import io.konektis.ems.EnergyManager
@@ -57,8 +62,10 @@ interface AppModule {
 
     @ApplicationScope
     @Provides
-    fun provideEnergyManager(world: World, config: Config, strategy: Strategy, chargerControlStore: ChargerControlStore): EnergyManager =
-        EnergyManager(world, config, strategy, chargerControlStore)
+    fun provideEnergyManager(
+        world: World, config: Config, strategy: Strategy,
+        chargerControlStore: ChargerControlStore, carDataService: CarDataService,
+    ): EnergyManager = EnergyManager(world, config, strategy, chargerControlStore, carDataService)
 
     @ApplicationScope
     @Provides
@@ -71,4 +78,20 @@ interface AppModule {
             ChargePointStore(database), IdTagStore(database),
             TransactionStore(database), config.ocpp,
         ).also { it.initStores() }
+
+    @ApplicationScope
+    @Provides
+    fun provideCarDataTokenStore(database: Database): CarDataTokenStore =
+        SqlCarDataTokenStore(database).also { it.init() }
+
+    @ApplicationScope
+    @Provides
+    fun provideCarDataService(
+        config: Config, tokenStore: CarDataTokenStore, httpClient: HttpClient,
+    ): CarDataService {
+        val cfg = config.cardata.validated()
+        val auth = CarDataAuth(cfg, tokenStore, httpClient)
+        val mqtt = CarDataMqttClient(cfg, auth)
+        return CarDataService(cfg, tokenStore, auth, mqtt)
+    }
 }

@@ -3,6 +3,7 @@ package io.konektis.config
 import com.sksamuel.hoplite.ConfigLoaderBuilder
 import com.sksamuel.hoplite.addFileSource
 import com.sksamuel.hoplite.addResourceSource
+import io.konektis.cardata.CarDataConfig
 import kotlinx.serialization.Serializable
 import java.io.File
 
@@ -92,6 +93,7 @@ data class Config(
     val ocpp: OcppConfig,
     val websocket: WebSocketConfig = WebSocketConfig("user", "password"),
     val database: DatabaseConfig = DatabaseConfig(),
+    val cardata: CarDataConfig = CarDataConfig(),
     val refreshThreads : Int = 50
 )
 

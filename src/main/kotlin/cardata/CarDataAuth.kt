@@ -1,5 +1,6 @@
 package io.konektis.cardata
 
+import io.ktor.client.HttpClient
 import kotlinx.serialization.json.*
 import java.time.Instant
 
@@ -39,3 +40,12 @@ fun parseTokenResponse(body: String): TokenResponse? = runCatching {
 /** True when [expiresAt] is within [marginSeconds] of [now] (so we should refresh proactively). */
 fun needsRefresh(expiresAt: Instant, now: Instant, marginSeconds: Long): Boolean =
     !expiresAt.minusSeconds(marginSeconds).isAfter(now)
+
+/** OAuth client for CarData. Pure parsing lives in the top-level helpers above; IO added in a later task. */
+class CarDataAuth(
+    private val config: CarDataConfig,
+    private val tokenStore: CarDataTokenStore,
+    private val http: HttpClient,
+) {
+    // Later task: ensureAuthorized() (device-code bootstrap) + currentIdToken() (refresh).
+}

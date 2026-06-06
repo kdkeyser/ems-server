@@ -27,9 +27,10 @@ class CarDataService(
         _socFlow.value = soc
     }
 
-    /** Start the connection loop. No-op when disabled. Full IO added in a later task. */
+    /** Bootstrap auth (one-time device approval), then stream SoC with token-aware reconnect. No-op when disabled. */
     suspend fun start() {
         if (!config.enabled) return
-        // Later task: bootstrap auth, then mqtt.run { onMessage(it) } with token-aware reconnect.
+        auth.ensureAuthorized()
+        mqtt.run(::onMessage)
     }
 }

@@ -6,6 +6,14 @@ ocpp:
 database:
   path: ems.db
 
+cardata:
+  enabled: false
+  clientId: ""            # generated in the BMW CarData portal (CARDATA API)
+  vin: ""                 # the vehicle to subscribe to
+  socDescriptor: ""       # the SoC telemetry descriptor (confirm in the portal's descriptor list)
+  # brokerHost / brokerPort default to BMW's customer streaming broker
+  #   (customer.streaming-cardata.bmwgroup.com:9000). See docs/adding-bmw-cardata.md.
+
 websocket:
   username: user
   password: password

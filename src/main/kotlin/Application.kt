@@ -83,6 +83,7 @@ class Main : Klogging {
             }
             energyManager.loadChargerControl()
             launch { energyManager.run() }
+            launch { component.carDataService.start() }
             launch {
                 val server = embeddedServer(Netty, port = 8080) {
                     module(energyManager, config.websocket, dataCollector.statusStateFlow, component.ocppService, component.database)

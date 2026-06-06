@@ -16,8 +16,9 @@ You do this once, as the vehicle owner, before enabling the integration.
    (`https://bmw-cardata.bmwgroup.com`) and sign in with your BMW account.
 2. Under **CARDATA API**, generate a **client ID**. Note it down — this is `cardata.clientId`.
 3. Under **Configure data stream** ("Configure data stream" → load all descriptors), **tick the
-   State-of-Charge descriptor** for your vehicle and save. Note the exact descriptor name — this is
-   `cardata.socDescriptor`. (Without this, the stream carries no SoC.)
+   State-of-Charge descriptor** for your vehicle and save. This is `cardata.socDescriptor`. (Without
+   this, the stream carries no SoC.) For the BMW i5 the displayed HV-battery charge in percent is
+   `vehicle.powertrain.electric.battery.stateOfCharge.displayed`.
 4. Note your vehicle's **VIN** — this is `cardata.vin`.
 
 > Only **one MQTT connection per BMW account** is allowed at a time. If you also run Home Assistant or

@@ -10,5 +10,6 @@ data class EMSState(
     val solarPower: Int?,
     val batteryPower : Int?,
     val batteryCharge: Int?,
-    val chargerConnection: ChargerConnection? = null
+    val chargerConnection: ChargerConnection? = null,
+    val carCharge: Int? = null,
 )

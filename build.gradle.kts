@@ -48,6 +48,8 @@ dependencies {
     implementation(libs.ktor.network)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.modbus.tcp)
+    implementation(libs.ktor.mqtt.client)
+    implementation(libs.ktor.mqtt.core)
     //implementation(libs.klogging.jvm)
     implementation(libs.bits)
     implementation(libs.endian)

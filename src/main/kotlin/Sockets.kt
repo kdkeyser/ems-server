@@ -72,6 +72,16 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
                 }
             }
 
+            // Push the car's SoC (%) whenever it changes (once authenticated). Like mode/charger
+            // control, the current value is also sent explicitly on auth below (initial emission dropped).
+            val carJob = launch {
+                energyManager.carSocFlow.collect { soc ->
+                    if (authenticated) {
+                        send(Json.encodeToString(Message.CarStateUpdate(soc) as Message))
+                    }
+                }
+            }
+
             incoming.consumeEach { frame ->
                 if (frame is Frame.Text) {
                     val text = frame.readText()
@@ -84,6 +94,7 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
                                     // Send the current mode immediately so the client reflects it on connect.
                                     send(Json.encodeToString(Message.ModeUpdate(energyManager.modeFlow.value) as Message))
                                     send(Json.encodeToString(Message.ChargerControlUpdate(energyManager.chargerControlFlow.value) as Message))
+                                    send(Json.encodeToString(Message.CarStateUpdate(energyManager.carSocFlow.value) as Message))
                                 } else {
                                     send(Json.encodeToString(Message.Unauthorized(message.username) as Message))
                                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication failed"))

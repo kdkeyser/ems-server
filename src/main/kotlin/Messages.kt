@@ -49,6 +49,8 @@ sealed class Message {
     data class ModeUpdate(val mode: ManagerMode) : Message()
     @Serializable @SerialName("ChargerControlUpdate")
     data class ChargerControlUpdate(val control: ChargerControl) : Message()
+    @Serializable @SerialName("CarStateUpdate")
+    data class CarStateUpdate(val soc: Int?) : Message()
 }
 
 @Serializable

@@ -97,7 +97,7 @@ class Main : Klogging {
 
 fun Application.module(energyManager: EnergyManager, wsConfig: WebSocketConfig, statusFlow: Flow<StatusState?>, ocppService: io.konektis.ocpp.OcppService, database: Database) {
     install(ContentNegotiation) { json() }
-    configureSecurity()
+    configureSecurity(wsConfig)
     configureAdministration()
     configureSockets(energyManager, wsConfig)
     configureStatusPage(statusFlow)

@@ -82,6 +82,26 @@ private fun intField(obj: JsonObject, name: String): Int? {
     return prim.doubleOrNull?.roundToInt()
 }
 
+private fun intOrNull(v: Int?): String = v?.toString() ?: "NULL"
+
+/**
+ * Build a single `INSERT INTO <db>.power_raw ... FORMAT Values` statement for [rows], or "" if empty.
+ * Timestamps are sent explicitly (toDateTime(epochSeconds)); ClickHouse stores DateTime as UTC.
+ * Values are mapped by schema column name, not EMSState field order.
+ */
+fun buildInsertSql(database: String, rows: List<TimestampedEmsState>): String {
+    if (rows.isEmpty()) return ""
+    val tuples = rows.joinToString(",") { row ->
+        val s = row.state
+        "(toDateTime(${row.ts.epochSecond})," +
+            "${intOrNull(s.gridPower)},${intOrNull(s.solarPower)},${intOrNull(s.chargerPower)}," +
+            "${intOrNull(s.heatpumpPower)},${intOrNull(s.batteryPower)},${intOrNull(s.batteryCharge)})"
+    }
+    return "INSERT INTO $database.power_raw " +
+        "(ts,grid_power,solar_power,charger_power,heatpump_power,battery_power,battery_charge) " +
+        "FORMAT Values $tuples"
+}
+
 /** Parse a ClickHouse JSONEachRow body (newline-delimited objects) into PowerPoints; tolerant of
  *  blank lines. Float64 averages from power_1m are rounded to whole Watts. */
 fun parsePowerPoints(body: String): List<PowerPoint> =

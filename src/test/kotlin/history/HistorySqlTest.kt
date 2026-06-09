@@ -72,4 +72,35 @@ class HistorySqlTest {
         assertTrue(parsePowerPoints("").isEmpty())
         assertTrue(parsePowerPoints("   \n  ").isEmpty())
     }
+
+    @Test fun insertValuesFormatsTimestampAndNulls() {
+        val rows = listOf(
+            TimestampedEmsState(
+                java.time.Instant.ofEpochSecond(1749456000),
+                io.konektis.ems.EMSState(
+                    gridPower = -1200, gridVoltage = 230, chargerPower = 1100,
+                    heatpumpPower = 800, solarPower = -3400, batteryPower = -1300,
+                    batteryCharge = 72,
+                ),
+            ),
+            TimestampedEmsState(
+                java.time.Instant.ofEpochSecond(1749456005),
+                io.konektis.ems.EMSState(
+                    gridPower = null, gridVoltage = null, chargerPower = null,
+                    heatpumpPower = null, solarPower = null, batteryPower = null,
+                    batteryCharge = null,
+                ),
+            ),
+        )
+        val sql = buildInsertSql("ems", rows)
+        assertTrue(sql.startsWith("INSERT INTO ems.power_raw"), sql)
+        assertTrue(sql.contains("FORMAT Values"), sql)
+        // First row: epoch wrapped in toDateTime, columns in schema order, NULL spelled out.
+        assertTrue(sql.contains("(toDateTime(1749456000),-1200,-3400,1100,800,-1300,72)"), sql)
+        assertTrue(sql.contains("(toDateTime(1749456005),NULL,NULL,NULL,NULL,NULL,NULL)"), sql)
+    }
+
+    @Test fun insertValuesEmptyRowsIsBlank() {
+        assertTrue(buildInsertSql("ems", emptyList()).isEmpty())
+    }
 }

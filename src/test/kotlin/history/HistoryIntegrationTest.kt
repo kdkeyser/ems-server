@@ -10,6 +10,7 @@ import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.utility.MountableFile
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import kotlin.test.*
 
 /**
@@ -57,14 +58,24 @@ class HistoryIntegrationTest {
             val writer = HistoryWriter(cfg, HttpClient(CIO))
             val repo = HistoryRepository(cfg, HttpClient(CIO))
 
-            val now = Instant.now()
-            writer.enqueue(TimestampedEmsState(now, state(-1200, 70)))
-            writer.enqueue(TimestampedEmsState(now.plusSeconds(5), state(-1100, 71)))
+            // Pin both ticks to the same wall-clock minute so the 1-minute aggregate is deterministic
+            // (one bucket) and both rows fall inside the H1 window.
+            val minute = Instant.now().truncatedTo(ChronoUnit.MINUTES)
+            writer.enqueue(TimestampedEmsState(minute, state(-1200, 70)))
+            writer.enqueue(TimestampedEmsState(minute.plusSeconds(5), state(-1100, 71)))
             writer.flushOnce()
 
-            val result = repo.query(HistoryRange.H1, HistoryResolution.RAW)
-            assertEquals(2, result.points.size)
-            assertEquals(setOf(-1200, -1100), result.points.map { it.gridPower }.toSet())
+            // Raw path: both ticks come back unaggregated from power_raw.
+            val raw = repo.query(HistoryRange.H1, HistoryResolution.RAW)
+            assertEquals(2, raw.points.size)
+            assertEquals(setOf(-1200, -1100), raw.points.map { it.gridPower }.toSet())
+
+            // 1-minute path: the materialized view + avgMerge collapse both ticks into one bucket
+            // averaging the two values (grid avg(-1200,-1100) = -1150, soc avg(70,71) rounds to 71).
+            val minuteAgg = repo.query(HistoryRange.D365, HistoryResolution.MINUTE)
+            assertEquals(1, minuteAgg.points.size, "both ticks share one minute bucket")
+            assertEquals(-1150, minuteAgg.points[0].gridPower)
+            assertEquals(71, minuteAgg.points[0].batteryCharge)
         }
     }
 }

@@ -2,6 +2,8 @@ package io.konektis.di
 
 import io.konektis.DataCollector
 import io.konektis.cardata.CarDataAuth
+import io.konektis.cardata.CarDataConfig
+import io.konektis.cardata.CarDataEndpoints
 import io.konektis.cardata.CarDataMqttClient
 import io.konektis.cardata.CarDataService
 import io.konektis.cardata.CarDataTokenStore
@@ -89,7 +91,15 @@ interface AppModule {
     fun provideCarDataService(
         config: Config, tokenStore: CarDataTokenStore, httpClient: HttpClient,
     ): CarDataService {
-        val cfg = config.cardata.validated()
+        val car = config.devices.car.firstOrNull()
+        val cfg = if (car != null) CarDataConfig(
+            enabled = car.enabled,
+            clientId = car.clientId,
+            vin = car.vin,
+            socDescriptor = CarDataEndpoints.SOC_DESCRIPTOR,
+            brokerHost = car.brokerHost,
+            brokerPort = car.brokerPort,
+        ).validated() else CarDataConfig()
         val auth = CarDataAuth(cfg, tokenStore, httpClient)
         val mqtt = CarDataMqttClient(cfg, auth)
         return CarDataService(cfg, tokenStore, auth, mqtt)

@@ -28,6 +28,16 @@ devices:
       chargePointId: CP01     # MUST match the id the charger dials in its OCPP URL
       chargingCurrent: { min: 6.0, max: 32.0 }
 
+  # BMW CarData — car battery SoC display (optional). See docs/adding-bmw-cardata.md.
+  car:
+    - type: BMW
+      name: BMW i5
+      enabled: false              # set to true once clientId and vin are filled in
+      clientId: CHANGE_ME         # OAuth client_id from the BMW CarData developer portal (CARDATA API)
+      vin: CHANGE_ME              # your vehicle's VIN (17-character string)
+      # Enable "vehicle.drivetrain.batteryManagement.header" in the portal under "Configure data stream".
+      # brokerHost / brokerPort: BMW streaming defaults; omit unless overriding.
+
 ocpp:
   enabled: true
   heartbeatInterval: 300
@@ -44,3 +54,4 @@ websocket:
 
 database:
   path: /data/ems.db          # persisted on the Docker volume, not in the image
+

@@ -299,7 +299,7 @@ class OcppService(
         }.toString()
         return try {
             session.session.send(Frame.Text(frame))
-            logger.info("Sent {action} to {cp}", action.name, chargePointId)
+            logger.debug("Sent {action} to {cp}", action.name, chargePointId)
             withTimeoutOrNull(config.callTimeoutSeconds.seconds) { deferred.await() }
                 ?: run { logger.warn("{action} to {cp} timed out", action.name, chargePointId); null }
         } catch (e: Exception) {

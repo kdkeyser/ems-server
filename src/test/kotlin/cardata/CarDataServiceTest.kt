@@ -1,6 +1,7 @@
 package io.konektis.cardata
 
 import io.mockk.mockk
+import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 
 class CarDataServiceTest {
@@ -15,14 +16,14 @@ class CarDataServiceTest {
     }
 
     @Test
-    fun onMessageUpdatesSocFlowForConfiguredDescriptor() {
+    fun onMessageUpdatesSocFlowForConfiguredDescriptor() = runTest {
         val svc = service("soc.desc")
         svc.onMessage("""{"vin":"WBA1","data":{"soc.desc":{"value":64}}}""")
         assertEquals(64, svc.socFlow.value)
     }
 
     @Test
-    fun onMessageIgnoresUnrelatedDescriptor() {
+    fun onMessageIgnoresUnrelatedDescriptor() = runTest {
         val svc = service("soc.desc")
         svc.onMessage("""{"vin":"WBA1","data":{"soc.desc":{"value":40}}}""")
         svc.onMessage("""{"vin":"WBA1","data":{"other":{"value":99}}}""") // no soc -> keep last

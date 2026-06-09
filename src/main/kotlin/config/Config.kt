@@ -3,7 +3,6 @@ package io.konektis.config
 import com.sksamuel.hoplite.ConfigLoaderBuilder
 import com.sksamuel.hoplite.addFileSource
 import com.sksamuel.hoplite.addResourceSource
-import io.konektis.cardata.CarDataConfig
 import kotlinx.serialization.Serializable
 import java.io.File
 
@@ -62,11 +61,26 @@ enum class BatteryType {
 @Serializable
 data class Battery(val type: BatteryType, val name: String, val host: String)
 @Serializable
+enum class CarType { BMW }
+
+@Serializable
+data class Car(
+    val type: CarType,
+    val name: String = "Car",
+    val enabled: Boolean = false,
+    val clientId: String = "",
+    val vin: String = "",
+    val brokerHost: String = "customer.streaming-cardata.bmwgroup.com",
+    val brokerPort: Int = 9000,
+)
+
+@Serializable
 data class Devices(
     val solar: List<Solar> = emptyList(),
     val heatPump: List<HeatPump> = emptyList(),
     val charger: List<Charger> = emptyList(),
-    val battery: List<Battery> = emptyList()
+    val battery: List<Battery> = emptyList(),
+    val car: List<Car> = emptyList(),
 )
 
 @Serializable
@@ -93,7 +107,6 @@ data class Config(
     val ocpp: OcppConfig,
     val websocket: WebSocketConfig = WebSocketConfig("user", "password"),
     val database: DatabaseConfig = DatabaseConfig(),
-    val cardata: CarDataConfig = CarDataConfig(),
     val refreshThreads : Int = 50
 )
 

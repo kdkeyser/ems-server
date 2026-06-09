@@ -29,35 +29,43 @@ ORDER BY ts
 TTL ts + INTERVAL 1 YEAR DELETE;
 ```
 
-**`power_1m`** — 1-minute averages, populated by a materialized view, retained indefinitely:
+**`power_1m`** — 1-minute partial aggregates, merged automatically by `AggregatingMergeTree`, retained indefinitely:
 
 ```sql
 CREATE TABLE ems.power_1m (
     ts             DateTime,
-    grid_power     Nullable(Float64),
-    solar_power    Nullable(Float64),
-    charger_power  Nullable(Float64),
-    heatpump_power Nullable(Float64),
-    battery_power  Nullable(Float64),
-    battery_charge Nullable(Float64)
-) ENGINE = MergeTree()
+    grid_power     AggregateFunction(avg, Nullable(Int32)),
+    solar_power    AggregateFunction(avg, Nullable(Int32)),
+    charger_power  AggregateFunction(avg, Nullable(Int32)),
+    heatpump_power AggregateFunction(avg, Nullable(Int32)),
+    battery_power  AggregateFunction(avg, Nullable(Int32)),
+    battery_charge AggregateFunction(avg, Nullable(Int32))
+) ENGINE = AggregatingMergeTree()
 ORDER BY ts;
 
 CREATE MATERIALIZED VIEW ems.power_1m_mv
 TO ems.power_1m AS
 SELECT
-    toStartOfMinute(ts) AS ts,
-    avg(grid_power)     AS grid_power,
-    avg(solar_power)    AS solar_power,
-    avg(charger_power)  AS charger_power,
-    avg(heatpump_power) AS heatpump_power,
-    avg(battery_power)  AS battery_power,
-    avg(battery_charge) AS battery_charge
+    toStartOfMinute(ts)      AS ts,
+    avgState(grid_power)     AS grid_power,
+    avgState(solar_power)    AS solar_power,
+    avgState(charger_power)  AS charger_power,
+    avgState(heatpump_power) AS heatpump_power,
+    avgState(battery_power)  AS battery_power,
+    avgState(battery_charge) AS battery_charge
 FROM ems.power_raw
 GROUP BY ts;
 ```
 
-All power values are Watts (Int32). `Nullable` handles missing device readings. The schema lives in `deploy/clickhouse-init.sql`, mounted as `/docker-entrypoint-initdb.d/init.sql` so ClickHouse applies it automatically on first start. The materialized view only captures new inserts; on migration from an existing `power_raw`, run the one-time backfill included as a commented command in `clickhouse-init.sql`: `INSERT INTO ems.power_1m SELECT toStartOfMinute(ts), avg(...) FROM ems.power_raw GROUP BY 1;`. On a fresh deploy this is a no-op.
+`AggregatingMergeTree` is required (not plain `MergeTree`) because the writer flushes every 30 seconds — each flush triggers the materialized view and writes a partial aggregate row for the current minute. `AggregatingMergeTree` merges those partials correctly using `-State`/`-Merge` combinators. With plain `MergeTree` + `avg()`, each minute would accumulate ~2 duplicate rows that are never reconciled.
+
+Queries against `power_1m` must use `avgMerge()`:
+```sql
+SELECT ts, avgMerge(grid_power), avgMerge(solar_power), ...
+FROM ems.power_1m GROUP BY ts ORDER BY ts
+```
+
+All power values are Watts (Int32). `Nullable` handles missing device readings. The schema lives in `deploy/clickhouse-init.sql`, mounted as `/docker-entrypoint-initdb.d/init.sql` so ClickHouse applies it automatically on first start. The materialized view only captures new inserts; on migration from an existing `power_raw`, run the one-time backfill included as a commented command in `clickhouse-init.sql` (using `-State` functions to match the `AggregatingMergeTree` format). On a fresh deploy this is a no-op.
 
 The schema is designed to accommodate future 1-second resolution without structural changes — only the TTL and insert cadence would change.
 
@@ -79,9 +87,9 @@ EnergyManager.emsStateFlow
 
 ## Query Path — `HistoryRepository` + REST Endpoint
 
-**`HistoryRepository`** (`src/main/kotlin/history/HistoryRepository.kt`) owns all ClickHouse queries. It builds a SQL `SELECT` from the requested range and resolution, fires it at `http://<host>:<port>/?query=<url-encoded-sql>&default_format=JSONEachRow`, and parses the JSON response into `List<PowerPoint>`.
+**`HistoryRepository`** (`src/main/kotlin/history/HistoryRepository.kt`) owns all ClickHouse queries. It builds a SQL `SELECT` from the requested range and resolution, fires it at `http://<host>:<port>/?query=<url-encoded-sql>&default_format=JSONEachRow`, and parses the response into `List<PowerPoint>`. ClickHouse returns `JSONEachRow` as newline-delimited JSON objects (one per line), not a JSON array — the parser splits on newlines and decodes each line independently. Fields are mapped by name (ClickHouse column name → Kotlin property), not by position; this avoids transposition bugs since `EMSState` contains `gridVoltage` between `gridPower` and `chargerPower` but that field is not stored.
 
-**Endpoint:** `GET /history` (authenticated via the existing `configureSecurity()` Basic auth, the same mechanism that guards other HTTP endpoints).
+**Endpoint:** `GET /history`, protected by Ktor's `authenticate("auth-basic")` block (same as other HTTP endpoints). As a prerequisite, `configureSecurity()` must be updated to accept `WebSocketConfig` and validate against `wsConfig.username/password` — currently it has hardcoded `"user"/"password"` which is a pre-existing bug. This fix is in-scope for this feature.
 
 Query parameters:
 
@@ -118,10 +126,9 @@ Power sign convention matches the rest of the EMS: negative = producing/exportin
 
 ## Config
 
-New optional top-level block in `Config.kt`:
+New optional top-level block in `Config.kt`. Config classes are loaded by Hoplite — no `@Serializable` annotation needed or wanted:
 
 ```kotlin
-@Serializable
 data class ClickHouseConfig(
     val enabled: Boolean = false,
     val host: String = "clickhouse",
@@ -129,7 +136,6 @@ data class ClickHouseConfig(
     val database: String = "ems",
 )
 
-@Serializable
 data class Config(
     ...
     val clickhouse: ClickHouseConfig = ClickHouseConfig(),
@@ -196,4 +202,4 @@ deploy/
 └── clickhouse-init.sql       # schema: power_raw, power_1m, materialized view
 ```
 
-Modified files: `Config.kt`, `AppModule.kt`, `Application.kt`, `docker-compose.yml`, `deploy/config.yaml.template`, `build.gradle.kts`, `gradle/libs.versions.toml`.
+Modified files: `Config.kt`, `AppModule.kt`, `Application.kt`, `Security.kt` (wire wsConfig into Basic auth), `docker-compose.yml`, `deploy/config.yaml.template`, `build.gradle.kts`, `gradle/libs.versions.toml`.

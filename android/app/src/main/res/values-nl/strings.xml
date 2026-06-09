@@ -50,6 +50,7 @@
     <string name="charger_status_connected_idle">Aangesloten — niet aan het opladen</string>
     <string name="charger_status_online">Lader online</string>
     <string name="charger_status_unavailable">Status niet beschikbaar</string>
+    <string name="charger_car_soc">Accuniveau auto: %1$d%%</string>
     <string name="cd_charger">Lader</string>
     <string name="cd_car">Auto</string>
     <string name="cd_charging">Opladen</string>

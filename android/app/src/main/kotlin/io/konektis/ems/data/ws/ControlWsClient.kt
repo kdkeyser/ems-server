@@ -45,6 +45,9 @@ class ControlWsClient(
     private val _chargerControl = MutableStateFlow<ChargerControl?>(null)
     val chargerControl: StateFlow<ChargerControl?> = _chargerControl.asStateFlow()
 
+    private val _carSoc = MutableStateFlow<Int?>(null)
+    val carSoc: StateFlow<Int?> = _carSoc.asStateFlow()
+
     private val commandChannel = Channel<ClientMessage>(Channel.BUFFERED)
 
     private val reconnectSignal = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -95,6 +98,7 @@ class ControlWsClient(
                                         }
                                         is Message.ModeUpdate -> _mode.value = msg.mode
                                         is Message.ChargerControlUpdate -> _chargerControl.value = msg.control
+                                        is Message.CarStateUpdate -> _carSoc.value = msg.soc
                                         else -> Unit
                                     }
                                 }

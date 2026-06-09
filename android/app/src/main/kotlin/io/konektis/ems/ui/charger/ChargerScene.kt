@@ -139,7 +139,7 @@ private fun Bolt(mode: BoltMode) {
 
 /** Charger-tab hero: the scene, the big value, and the status line with a colored dot. */
 @Composable
-fun ChargerHero(uiState: ChargerUiState, chargerW: Int?, sessionActive: Boolean, modifier: Modifier = Modifier) {
+fun ChargerHero(uiState: ChargerUiState, chargerW: Int?, sessionActive: Boolean, carSoc: Int? = null, modifier: Modifier = Modifier) {
     val ems = LocalEmsColors.current
     val isCharging = uiState == ChargerUiState.CHARGING
     val online = uiState != ChargerUiState.NO_CAR &&
@@ -170,6 +170,13 @@ fun ChargerHero(uiState: ChargerUiState, chargerW: Int?, sessionActive: Boolean,
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("●", fontSize = 10.sp, color = if (online) ems.online else ems.consumption)
                 Text(statusText, style = MaterialTheme.typography.bodySmall, color = ems.idle)
+            }
+            if (carSoc != null && uiState != ChargerUiState.NO_CAR && uiState != ChargerUiState.CONTROLS_FALLBACK) {
+                Text(
+                    stringResource(R.string.charger_car_soc, carSoc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ems.idle,
+                )
             }
         }
     }

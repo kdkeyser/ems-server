@@ -52,6 +52,7 @@
     <string name="charger_status_connected_idle">Connected — not charging</string>
     <string name="charger_status_online">Charger online</string>
     <string name="charger_status_unavailable">Status unavailable</string>
+    <string name="charger_car_soc">Car battery: %1$d%%</string>
     <string name="cd_charger">Charger</string>
     <string name="cd_car">Car</string>
     <string name="cd_charging">Charging</string>

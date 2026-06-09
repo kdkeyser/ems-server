@@ -51,6 +51,7 @@ fun ChargerScreen(
     controlState: ControlState,
     chargerControl: ChargerControl?,
     mode: ManagerMode?,
+    carSoc: Int? = null,
     onSetCharging: (ChargerControl) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -71,6 +72,7 @@ fun ChargerScreen(
             uiState = uiState,
             chargerW = chargerW,
             sessionActive = chargerControl?.charging ?: false,
+            carSoc = carSoc,
         )
 
         if (uiState != ChargerUiState.NO_CAR) {

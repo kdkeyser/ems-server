@@ -66,6 +66,7 @@ fun DashboardScreen(
     val controlState by vm.controlState.collectAsState()
     val mode by vm.mode.collectAsState()
     val chargerControl by vm.chargerControl.collectAsState()
+    val carSoc by vm.carSoc.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
 
     val statusBanner: Pair<Color, String>? = when (connectionState) {
@@ -125,6 +126,7 @@ fun DashboardScreen(
                     controlState = controlState,
                     chargerControl = chargerControl,
                     mode = mode,
+                    carSoc = carSoc,
                     onSetCharging = vm::setCharging
                 )
                 2 -> HeatPumpScreen(state = status)

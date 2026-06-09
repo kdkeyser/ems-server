@@ -55,3 +55,10 @@ websocket:
 database:
   path: /data/ems.db          # persisted on the Docker volume, not in the image
 
+# Power-history store. Reached over the shared Docker bridge as http://clickhouse:8123.
+clickhouse:
+  enabled: true
+  host: clickhouse
+  port: 8123
+  database: ems
+

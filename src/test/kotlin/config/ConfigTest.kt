@@ -63,4 +63,45 @@ class ConfigTest {
         assertEquals(2, config.devices.solar?.size)
         assertEquals("ems.db", config.database.path)
     }
+
+    @Test
+    fun clickHouseDefaultsDisabled() {
+        val config = loadConfig("/config.yaml", filePath = null)
+        assertEquals(false, config.clickhouse.enabled)
+        assertEquals("clickhouse", config.clickhouse.host)
+        assertEquals(8123, config.clickhouse.port)
+        assertEquals("ems", config.clickhouse.database)
+    }
+
+    @Test
+    fun clickHouseLoadsFromFile() {
+        val yaml = """
+            grid:
+              type: P1HomeWizard
+              gridType: Phase3_400V
+              host: 10.9.9.9
+            devices:
+              charger:
+                - type: OCPP
+                  name: CP
+                  chargePointId: CP01
+                  chargingCurrent: { min: 6.0, max: 32.0 }
+            ocpp:
+              enabled: true
+              heartbeatInterval: 300
+              connectionTimeout: 60
+            clickhouse:
+              enabled: true
+              host: ch-host
+              port: 9000
+              database: hist
+        """.trimIndent()
+        val tmp = File.createTempFile("ems-config-ch", ".yaml")
+        tmp.writeText(yaml); tmp.deleteOnExit()
+        val config = loadConfig("/config.yaml", filePath = tmp.absolutePath)
+        assertEquals(true, config.clickhouse.enabled)
+        assertEquals("ch-host", config.clickhouse.host)
+        assertEquals(9000, config.clickhouse.port)
+        assertEquals("hist", config.clickhouse.database)
+    }
 }

@@ -107,6 +107,7 @@ data class Config(
     val ocpp: OcppConfig,
     val websocket: WebSocketConfig = WebSocketConfig("user", "password"),
     val database: DatabaseConfig = DatabaseConfig(),
+    val clickhouse: ClickHouseConfig = ClickHouseConfig(),
     val refreshThreads : Int = 50
 )
 

@@ -47,6 +47,7 @@ hoplite-yaml = { module = "com.sksamuel.hoplite:hoplite-yaml", version.ref = "ho
 klogging-sl4j = { module = "io.klogging:slf4j-klogging", version.ref = "klogging"}
 kotlin-inject-runtime = { module = "me.tatarka.inject:kotlin-inject-runtime", version.ref = "kotlin-inject" }
 kotlin-inject-compiler = { module = "me.tatarka.inject:kotlin-inject-compiler-ksp", version.ref = "kotlin-inject" }
+testcontainers = { module = "org.testcontainers:testcontainers", version = "1.20.1" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

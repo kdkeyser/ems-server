@@ -47,4 +47,29 @@ class HistorySqlTest {
         assertTrue(sql.contains("GROUP BY ts"), sql)
         assertTrue(sql.contains("ts >= now() - INTERVAL 31536000 SECOND"), sql)
     }
+
+    @Test fun parsesNewlineDelimitedRows() {
+        val body = """
+            {"ts":1749456000,"grid_power":-1200,"solar_power":-3400,"charger_power":1100,"heatpump_power":800,"battery_power":-1300,"battery_charge":72}
+            {"ts":1749456005,"grid_power":-1100,"solar_power":-3300,"charger_power":1100,"heatpump_power":810,"battery_power":-1200,"battery_charge":72}
+        """.trimIndent()
+        val points = parsePowerPoints(body)
+        assertEquals(2, points.size)
+        assertEquals(1749456000L, points[0].ts)
+        assertEquals(-1200, points[0].gridPower)
+        assertEquals(72, points[1].batteryCharge)
+    }
+
+    @Test fun parseHandlesNullsAndBlankLines() {
+        val body = "{\"ts\":1749456000,\"grid_power\":null,\"solar_power\":0,\"charger_power\":0,\"heatpump_power\":0,\"battery_power\":0,\"battery_charge\":50}\n\n"
+        val points = parsePowerPoints(body)
+        assertEquals(1, points.size)
+        assertNull(points[0].gridPower)
+        assertEquals(0, points[0].solarPower)
+    }
+
+    @Test fun parseEmptyBodyReturnsEmpty() {
+        assertTrue(parsePowerPoints("").isEmpty())
+        assertTrue(parsePowerPoints("   \n  ").isEmpty())
+    }
 }

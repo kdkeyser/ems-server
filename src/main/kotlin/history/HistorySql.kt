@@ -1,6 +1,12 @@
 package io.konektis.history
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.doubleOrNull
+import kotlin.math.roundToInt
 
 /** Time window for a history query. [seconds] is how far back from now to read. */
 enum class HistoryRange(val param: String, val seconds: Long) {
@@ -66,3 +72,32 @@ data class HistoryResponse(
     val resolution: String,
     val points: List<PowerPoint>,
 )
+
+private val historyJson = Json { ignoreUnknownKeys = true }
+
+private fun intField(obj: JsonObject, name: String): Int? {
+    val el = obj[name] ?: return null
+    val prim = el.jsonPrimitive
+    if (prim.content == "null") return null
+    return prim.doubleOrNull?.roundToInt()
+}
+
+/** Parse a ClickHouse JSONEachRow body (newline-delimited objects) into PowerPoints; tolerant of
+ *  blank lines. Float64 averages from power_1m are rounded to whole Watts. */
+fun parsePowerPoints(body: String): List<PowerPoint> =
+    body.lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .map { line ->
+            val o = historyJson.parseToJsonElement(line).jsonObject
+            PowerPoint(
+                ts = o["ts"]!!.jsonPrimitive.content.toDouble().toLong(),
+                gridPower = intField(o, "grid_power"),
+                solarPower = intField(o, "solar_power"),
+                chargerPower = intField(o, "charger_power"),
+                heatpumpPower = intField(o, "heatpump_power"),
+                batteryPower = intField(o, "battery_power"),
+                batteryCharge = intField(o, "battery_charge"),
+            )
+        }
+        .toList()

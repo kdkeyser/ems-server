@@ -59,6 +59,7 @@ dependencies {
     testImplementation(libs.kotlin.test.junit)
     testImplementation("io.mockk:mockk:1.13.16")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
+    testImplementation(libs.ktor.client.mock)
     testImplementation(libs.ktor.client.websockets)
     implementation(libs.kotlin.inject.runtime)
     ksp(libs.kotlin.inject.compiler)

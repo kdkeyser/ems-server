@@ -38,9 +38,12 @@ services:
     image: clickhouse/clickhouse-server:24.8
     container_name: clickhouse
     restart: unless-stopped
+    environment:
+      GRAFANA_CH_PASSWORD: ${GRAFANA_CH_PASSWORD:?set in .env}
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - ./deploy/clickhouse-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./deploy/clickhouse/users.d/grafana.xml:/etc/clickhouse-server/users.d/grafana.xml:ro
     ulimits:
       nofile:
         soft: 262144

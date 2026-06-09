@@ -1,0 +1,14 @@
+<clickhouse>
+    <users>
+        <grafana>
+            <password from_env="GRAFANA_CH_PASSWORD"/>
+            <networks><ip>::/0</ip></networks>
+            <profile>readonly</profile>
+            <quota>default</quota>
+            <allow_databases>
+                <database>ems</database>
+                <database>system</database>
+            </allow_databases>
+        </grafana>
+    </users>
+</clickhouse>

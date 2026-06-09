@@ -31,6 +31,7 @@ src/main/kotlin/
 │   ├── EnergyManager.kt    # Reads World state, emits EMSState, applies ControlDecisions
 │   ├── Strategy.kt         # Strategy interface + WorldSnapshot + ControlDecisions
 │   └── SurplusPriorityStrategy.kt  # Default: heat pump → charger → battery
+├── history/                # ClickHouse history collector + GET /history query endpoint
 └── ocpp/
     ├── OcppMessages.kt     # OCPP 1.6J message types (serialisable data classes)
     ├── OcppServer.kt       # WebSocket /ocpp/{chargePointId} endpoint (subprotocol ocpp1.6)
@@ -41,6 +42,7 @@ src/main/kotlin/
 ```
 
 See [docs/adding-an-ocpp-charger.md](docs/adding-an-ocpp-charger.md) for how to configure and connect an OCPP charger.
+See [docs/adding-clickhouse-history.md](docs/adding-clickhouse-history.md) for the ClickHouse power-history store and the `GET /history` API.
 
 ## Device Communication Protocols
 

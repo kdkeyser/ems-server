@@ -5,8 +5,11 @@ import io.klogging.Level
 import io.klogging.config.loggingConfiguration
 import io.klogging.rendering.RENDER_SIMPLE
 import io.klogging.sending.STDOUT
+import io.konektis.config.ClickHouseConfig
 import io.konektis.config.loadConfig
 import io.konektis.config.WebSocketConfig
+import io.konektis.history.HistoryRepository
+import io.konektis.history.configureHistoryAuthenticated
 import io.konektis.di.AppComponent
 import io.konektis.di.create
 import io.konektis.ems.EnergyManager
@@ -84,9 +87,14 @@ class Main : Klogging {
             energyManager.loadChargerControl()
             launch { energyManager.run() }
             launch { component.carDataService.start() }
+            launch { component.historyWriter.run(energyManager.emsHistoryFlow) }
             launch {
                 val server = embeddedServer(Netty, port = 8080) {
-                    module(energyManager, config.websocket, dataCollector.statusStateFlow, component.ocppService, component.database)
+                    module(
+                        energyManager, config.websocket, dataCollector.statusStateFlow,
+                        component.ocppService, component.database,
+                        component.historyRepository, config.clickhouse,
+                    )
                 }
                 server.start(wait = true)
             }
@@ -95,15 +103,20 @@ class Main : Klogging {
     }
 }
 
-fun Application.module(energyManager: EnergyManager, wsConfig: WebSocketConfig, statusFlow: Flow<StatusState?>, ocppService: io.konektis.ocpp.OcppService, database: Database) {
+fun Application.module(
+    energyManager: EnergyManager, wsConfig: WebSocketConfig, statusFlow: Flow<StatusState?>,
+    ocppService: io.konektis.ocpp.OcppService, database: Database,
+    historyRepository: HistoryRepository, clickhouse: ClickHouseConfig,
+) {
     install(ContentNegotiation) { json() }
-    configureSecurity()
+    configureSecurity(wsConfig)
     configureAdministration()
     configureSockets(energyManager, wsConfig)
     configureStatusPage(statusFlow)
     configureOcppServer(ocppService)
     configureOcppWebUi(ocppService, energyManager)
     configureDatabases(database)
+    configureHistoryAuthenticated(clickhouse, historyRepository)
     configureMonitoring()
     configureHTTP()
     configureRouting()

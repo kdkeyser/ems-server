@@ -17,11 +17,12 @@ import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import java.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import io.konektis.config.WebSocketConfig
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.*
 import org.slf4j.event.*
 
-fun Application.configureSecurity() {
+fun Application.configureSecurity(wsConfig: WebSocketConfig) {
     install(Sessions) {
         cookie<MySession>("MY_SESSION") {
             cookie.extensions["SameSite"] = "lax"
@@ -31,7 +32,7 @@ fun Application.configureSecurity() {
         basic(name = "auth-basic") {
             realm = "Access to the '/' path"
             validate { credentials ->
-                if (credentials.name == "user" && credentials.password == "password") {
+                if (credentials.name == wsConfig.username && credentials.password == wsConfig.password) {
                     UserIdPrincipal(credentials.name)
                 } else {
                     null

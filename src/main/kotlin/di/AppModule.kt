@@ -14,6 +14,8 @@ import io.konektis.ems.EnergyManager
 import io.konektis.ems.Strategy
 import io.konektis.ems.SurplusPriorityStrategy
 import io.konektis.ems.SimpleGridCompensationStrategy
+import io.konektis.history.HistoryRepository
+import io.konektis.history.HistoryWriter
 import io.konektis.ocpp.OcppService
 import io.konektis.ocpp.db.ChargePointStore
 import io.konektis.ocpp.db.ChargerControlStore
@@ -103,5 +105,23 @@ interface AppModule {
         val auth = CarDataAuth(cfg, tokenStore, httpClient)
         val mqtt = CarDataMqttClient(cfg, auth)
         return CarDataService(cfg, tokenStore, auth, mqtt)
+    }
+
+    @ApplicationScope
+    @Provides
+    fun provideHistoryWriter(config: Config): HistoryWriter {
+        val client = HttpClient(CIO) {
+            install(HttpTimeout) { connectTimeoutMillis = 10_000; requestTimeoutMillis = 30_000 }
+        }
+        return HistoryWriter(config.clickhouse, client)
+    }
+
+    @ApplicationScope
+    @Provides
+    fun provideHistoryRepository(config: Config): HistoryRepository {
+        val client = HttpClient(CIO) {
+            install(HttpTimeout) { connectTimeoutMillis = 10_000; requestTimeoutMillis = 30_000 }
+        }
+        return HistoryRepository(config.clickhouse, client)
     }
 }

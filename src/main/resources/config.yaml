@@ -6,6 +6,9 @@ ocpp:
 database:
   path: ems.db
 
+clickhouse:
+  enabled: false
+
 websocket:
   username: user
   password: password

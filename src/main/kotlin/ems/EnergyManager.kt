@@ -11,11 +11,17 @@ import io.konektis.devices.World
 import io.konektis.devices.charger.ChargerConnection
 import io.konektis.devices.smartConsumers.ConsumeMode
 import io.konektis.ocpp.db.ChargerControlStore
+import io.konektis.history.TimestampedEmsState
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.time.delay
 import java.time.Duration
+import java.time.Instant
 
 enum class Mode {
     AUTO, MANUAL
@@ -38,6 +44,17 @@ class EnergyManager(
 
     val emsStateFlow = MutableStateFlow(EMSState(null, null, null, null, null, null, null))
     val modeFlow = MutableStateFlow(ManagerMode.AUTO)
+
+    /**
+     * Non-conflating tap of every tick for the history collector. Unlike [emsStateFlow] (a StateFlow
+     * that drops values equal to the previous one), this emits on every tick so identical consecutive
+     * states during quiet periods are still recorded. DROP_OLDEST keeps tick() non-blocking if no
+     * collector is attached or it falls behind.
+     */
+    private val _emsHistoryFlow = MutableSharedFlow<TimestampedEmsState>(
+        extraBufferCapacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val emsHistoryFlow: SharedFlow<TimestampedEmsState> = _emsHistoryFlow.asSharedFlow()
 
     /** Latest car SoC (%) for the socket to push; a constant null flow when CarData is disabled. */
     val carSocFlow: StateFlow<Int?> = carDataService?.socFlow ?: MutableStateFlow<Int?>(null)
@@ -88,6 +105,7 @@ class EnergyManager(
     suspend fun tick() {
         val emsState = buildEMSState()
         emsStateFlow.value = emsState
+        _emsHistoryFlow.tryEmit(TimestampedEmsState(Instant.now(), emsState))
 
         // AUTO -> MANUAL transition: hand everything back to its own logic, once.
         if (mode == Mode.MANUAL && previousMode == Mode.AUTO) {

@@ -5,6 +5,8 @@ import io.konektis.cardata.CarDataService
 import io.konektis.config.Config
 import io.konektis.devices.World
 import io.konektis.ems.EnergyManager
+import io.konektis.history.HistoryRepository
+import io.konektis.history.HistoryWriter
 import io.konektis.ocpp.OcppService
 import io.ktor.client.HttpClient
 import me.tatarka.inject.annotations.Component
@@ -23,6 +25,8 @@ abstract class AppComponent(
     abstract val database: Database
     abstract val ocppService: OcppService
     abstract val carDataService: CarDataService
+    abstract val historyWriter: HistoryWriter
+    abstract val historyRepository: HistoryRepository
 
     companion object
 }

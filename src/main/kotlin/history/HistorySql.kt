@@ -25,6 +25,31 @@ enum class HistoryResolution(val param: String) {
 fun autoResolution(range: HistoryRange): HistoryResolution =
     if (range.seconds <= HistoryRange.H24.seconds) HistoryResolution.RAW else HistoryResolution.MINUTE
 
+private val POWER_COLUMNS = listOf(
+    "grid_power", "solar_power", "charger_power", "heatpump_power", "battery_power", "battery_charge",
+)
+
+/**
+ * Build the ClickHouse SELECT for a history query. RAW reads power_raw directly; MINUTE reads the
+ * AggregatingMergeTree power_1m and must avgMerge + GROUP BY ts to collapse partial-aggregate rows.
+ * Only enum-derived and config-trusted values are interpolated — no user strings.
+ */
+fun buildSelectSql(database: String, range: HistoryRange, resolution: HistoryResolution): String {
+    val window = "ts >= now() - INTERVAL ${range.seconds} SECOND"
+    return when (resolution) {
+        HistoryResolution.RAW -> buildString {
+            append("SELECT toUnixTimestamp(ts) AS ts, ")
+            append(POWER_COLUMNS.joinToString(", "))
+            append(" FROM $database.power_raw WHERE $window ORDER BY ts FORMAT JSONEachRow")
+        }
+        HistoryResolution.MINUTE -> buildString {
+            append("SELECT toUnixTimestamp(ts) AS ts, ")
+            append(POWER_COLUMNS.joinToString(", ") { "avgMerge($it) AS $it" })
+            append(" FROM $database.power_1m WHERE $window GROUP BY ts ORDER BY ts FORMAT JSONEachRow")
+        }
+    }
+}
+
 @Serializable
 data class PowerPoint(
     val ts: Long,

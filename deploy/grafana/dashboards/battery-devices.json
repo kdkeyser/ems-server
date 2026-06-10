@@ -1,0 +1,41 @@
+{
+  "uid": "ems-battery-devices",
+  "title": "Battery & Devices",
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Battery power (W) and SoC (%)",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ems-clickhouse" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ems-clickhouse" },
+          "queryType": "sql",
+          "rawSql": "SELECT ts AS time, battery_power, battery_charge FROM ems.power_raw WHERE $__timeFilter(ts) ORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "barchart",
+      "title": "Battery throughput per day (kWh)",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 10 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ems-clickhouse" },
+      "fieldConfig": { "defaults": { "unit": "kwatth" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ems-clickhouse" },
+          "queryType": "sql",
+          "rawSql": "SELECT toDate(ts) AS time, ifNull(sumIf(b, b > 0), 0) / 60.0 / 1000.0 AS battery_charged_kwh, ifNull(sumIf(-b, b < 0), 0) / 60.0 / 1000.0 AS battery_discharged_kwh FROM (SELECT ts, avgMerge(battery_power) AS b FROM ems.power_1m WHERE $__timeFilter(ts) GROUP BY ts) GROUP BY time ORDER BY time"
+        }
+      ]
+    }
+  ]
+}

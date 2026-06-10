@@ -1,0 +1,41 @@
+{
+  "uid": "ems-power-flow",
+  "title": "Power Flow",
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Power (W)",
+      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ems-clickhouse" },
+      "fieldConfig": { "defaults": { "unit": "watt" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ems-clickhouse" },
+          "queryType": "sql",
+          "rawSql": "SELECT ts AS time, grid_power, solar_power, charger_power, heatpump_power, battery_power FROM ems.power_raw WHERE $__timeFilter(ts) ORDER BY ts"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Battery SoC (%)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 11 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ems-clickhouse" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ems-clickhouse" },
+          "queryType": "sql",
+          "rawSql": "SELECT ts AS time, battery_charge FROM ems.power_raw WHERE $__timeFilter(ts) ORDER BY ts"
+        }
+      ]
+    }
+  ]
+}

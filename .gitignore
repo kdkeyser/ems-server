@@ -49,6 +49,8 @@ ems.db
 ### Deploy artifacts ###
 # Container image bundle produced by deploy/build-podman.sh
 ems-images.tar.gz
+# Self-contained deployment bundle from deploy/build-podman.sh (embeds the real config.yaml) — secret
+ems-deploy.zip
 # Holds TUNNEL_TOKEN (Cloudflare Tunnel) for docker compose — secret, never commit
 .env
 # Filled-in production config (copied from deploy/config.yaml.template) — has real creds

@@ -43,6 +43,7 @@ src/main/kotlin/
 
 See [docs/adding-an-ocpp-charger.md](docs/adding-an-ocpp-charger.md) for how to configure and connect an OCPP charger.
 See [docs/adding-clickhouse-history.md](docs/adding-clickhouse-history.md) for the ClickHouse power-history store and the `GET /history` API.
+See [docs/adding-grafana-dashboards.md](docs/adding-grafana-dashboards.md) for the LAN-only Grafana dashboards over the ClickHouse history.
 
 ## Device Communication Protocols
 

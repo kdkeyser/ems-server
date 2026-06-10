@@ -38,14 +38,37 @@ services:
     image: clickhouse/clickhouse-server:24.8
     container_name: clickhouse
     restart: unless-stopped
+    environment:
+      GRAFANA_CH_PASSWORD: ${GRAFANA_CH_PASSWORD:?set in .env}
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - ./deploy/clickhouse-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./deploy/clickhouse/users.d/grafana.xml:/etc/clickhouse-server/users.d/grafana.xml:ro
     ulimits:
       nofile:
         soft: 262144
         hard: 262144
 
+  grafana:
+    image: grafana/grafana-oss:11.4.0
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource 4.5.1
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GRAFANA_CH_PASSWORD: ${GRAFANA_CH_PASSWORD:?set in .env}
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - clickhouse
+
 volumes:
   ems-data:
   clickhouse-data:
+  grafana-data:

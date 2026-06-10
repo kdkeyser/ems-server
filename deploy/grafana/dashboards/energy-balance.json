@@ -1,0 +1,57 @@
+{
+  "uid": "ems-energy-balance",
+  "title": "Energy Balance",
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "time": { "from": "now-30d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "barchart",
+      "title": "Grid energy per day (kWh)",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ems-clickhouse" },
+      "fieldConfig": { "defaults": { "unit": "kwatth" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ems-clickhouse" },
+          "queryType": "sql",
+          "rawSql": "SELECT toDate(ts) AS time, ifNull(sumIf(g, g > 0), 0) / 60.0 / 1000.0 AS imported_kwh, ifNull(sumIf(-g, g < 0), 0) / 60.0 / 1000.0 AS exported_kwh FROM (SELECT ts, avgMerge(grid_power) AS g FROM ems.power_1m WHERE $__timeFilter(ts) GROUP BY ts) GROUP BY time ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "barchart",
+      "title": "Solar produced per day (kWh)",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ems-clickhouse" },
+      "fieldConfig": { "defaults": { "unit": "kwatth" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ems-clickhouse" },
+          "queryType": "sql",
+          "rawSql": "SELECT toDate(ts) AS time, ifNull(sumIf(-s, s < 0), 0) / 60.0 / 1000.0 AS solar_produced_kwh FROM (SELECT ts, avgMerge(solar_power) AS s FROM ems.power_1m WHERE $__timeFilter(ts) GROUP BY ts) GROUP BY time ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "barchart",
+      "title": "Device energy per day (kWh)",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 9 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ems-clickhouse" },
+      "fieldConfig": { "defaults": { "unit": "kwatth" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ems-clickhouse" },
+          "queryType": "sql",
+          "rawSql": "SELECT toDate(ts) AS time, ifNull(sum(c), 0) / 60.0 / 1000.0 AS charger_kwh, ifNull(sum(h), 0) / 60.0 / 1000.0 AS heatpump_kwh FROM (SELECT ts, avgMerge(charger_power) AS c, avgMerge(heatpump_power) AS h FROM ems.power_1m WHERE $__timeFilter(ts) GROUP BY ts) GROUP BY time ORDER BY time"
+        }
+      ]
+    }
+  ]
+}

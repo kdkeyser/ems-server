@@ -1,0 +1,16 @@
+apiVersion: 1
+datasources:
+  - name: EMS ClickHouse
+    uid: ems-clickhouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    isDefault: true
+    jsonData:
+      host: clickhouse
+      port: 9000
+      protocol: native
+      defaultDatabase: ems
+      username: grafana
+    secureJsonData:
+      password: $GRAFANA_CH_PASSWORD
+    editable: false

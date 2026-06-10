@@ -1,0 +1,15 @@
+<clickhouse>
+    <users>
+        <grafana>
+            <password from_env="GRAFANA_CH_PASSWORD"/>
+            <networks><ip>::/0</ip></networks>
+            <profile>readonly</profile>
+            <quota>default</quota>
+            <!-- ems = the history data; system = lets Grafana's datasource browse schema (read-only) -->
+            <allow_databases>
+                <database>ems</database>
+                <database>system</database>
+            </allow_databases>
+        </grafana>
+    </users>
+</clickhouse>

@@ -17,7 +17,7 @@ GRAFANA_CH_PASSWORD=<choose a strong password>
 ```
 
 `GRAFANA_ADMIN_PASSWORD` is the password for the Grafana `admin` account.
-`GRAFANA_CH_PASSWORD` is the password for the read-only ClickHouse user (`grafana_reader`)
+`GRAFANA_CH_PASSWORD` is the password for the read-only ClickHouse user (`grafana`)
 that Grafana uses to query the `ems` database. Both are required — compose refuses to
 start the service if either is unset.
 

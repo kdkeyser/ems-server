@@ -55,6 +55,7 @@ dependencies {
     implementation(libs.hoplite.core)
     implementation(libs.hoplite.yaml)
     implementation(libs.klogging.sl4j)
+    testImplementation("com.charleskorn.kaml:kaml:0.79.0")
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
     testImplementation("io.mockk:mockk:1.13.16")

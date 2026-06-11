@@ -200,6 +200,9 @@ class OcppService(
         // retrying RemoteStartTransaction — rejected by the charger — while the car charges fine.
         request.transactionId?.let { txId ->
             if (connector != null && connector.currentTransactionId != txId) connector.currentTransactionId = txId
+            // A recovered (charger-issued) id may be at/above our counter; bump it so the next
+            // StartTransaction cannot hand out a duplicate id.
+            transactionIdCounter.updateAndGet { maxOf(it, txId + 1) }
         }
 
         val powerW = extractActivePowerW(request)

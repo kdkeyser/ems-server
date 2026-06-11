@@ -159,6 +159,22 @@ class OcppServiceTest {
     }
 
     @Test
+    fun `recovered transaction id bumps the counter past it`() = runTest {
+        val db = freshTestDb()
+        val svc = OcppService(
+            ChargePointStore(db), IdTagStore(db), TransactionStore(db),
+            OcppConfig(true, 300, 60, acceptUnknownChargePoints = true, autoProbeOnBoot = false),
+        ).also { it.initStores() }
+        svc.registerSession("CP1", mockk(relaxed = true))
+        // Charger reports an in-flight transaction the server never issued (recovered after restart).
+        svc.handleMeterValues("CP1", MeterValuesRequest(connectorId = 1, transactionId = 500, meterValue = emptyList()))
+        val resp = svc.handleStartTransaction(
+            "CP1", StartTransactionRequest(connectorId = 1, idTag = "EMS", meterStart = 0, timestamp = "2026-06-10T00:00:00Z"),
+        )
+        assertTrue(resp.transactionId > 500, "expected id > 500, got ${resp.transactionId}")
+    }
+
+    @Test
     fun previouslyAcceptedChargePointStaysAcceptedWithAutoAcceptOff() = runTest {
         val db = freshTestDb()
         // First boot with auto-accept on: CPX gets accepted + persisted.

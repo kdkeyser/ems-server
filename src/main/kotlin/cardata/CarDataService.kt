@@ -1,6 +1,7 @@
 package io.konektis.cardata
 
 import io.klogging.Klogging
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,10 +44,18 @@ class CarDataService(
         logger.debug("BMW CarData descriptor: $descriptor")
     }
 
-    /** Bootstrap auth (one-time device approval), then stream SoC with token-aware reconnect. No-op when disabled. */
+    /** Bootstrap auth (one-time device approval), then stream SoC with token-aware reconnect. No-op when disabled.
+     *  Never throws (except cancellation): this runs as a sibling of the EMS control loops in one
+     *  coroutineScope, and an MQTT/auth failure must not cancel battery/charger control. */
     suspend fun start() {
         if (!config.enabled) return
-        auth.ensureAuthorized()
-        mqtt.run(::onMessage)
+        try {
+            auth.ensureAuthorized()
+            mqtt.run(::onMessage)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logger.error(e, "BMW CarData stopped: ${e.message} — car SoC will be unavailable")
+        }
     }
 }

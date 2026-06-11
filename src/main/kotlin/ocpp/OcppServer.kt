@@ -14,17 +14,14 @@ private const val OCPP_SUBPROTOCOL = "ocpp1.6"
 fun Application.configureOcppServer(service: OcppService) {
     val handler = OcppMessageHandler(service)
     routing {
-        webSocket("/ocpp/{chargePointId}", protocol = OCPP_SUBPROTOCOL) {
-            val chargePointId = call.parameters["chargePointId"] ?: run {
-                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Missing charge point ID")); return@webSocket
+        // Same handler on both paths: some chargers append the OCPP version to the URL.
+        listOf("/ocpp/{chargePointId}", "/ocpp/1.6/{chargePointId}").forEach { path ->
+            webSocket(path, protocol = OCPP_SUBPROTOCOL) {
+                val chargePointId = call.parameters["chargePointId"] ?: run {
+                    close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Missing charge point ID")); return@webSocket
+                }
+                handler.handleConnection(chargePointId, this)
             }
-            handler.handleConnection(chargePointId, this)
-        }
-        webSocket("/ocpp/1.6/{chargePointId}", protocol = OCPP_SUBPROTOCOL) {
-            val chargePointId = call.parameters["chargePointId"] ?: run {
-                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Missing charge point ID")); return@webSocket
-            }
-            handler.handleConnection(chargePointId, this)
         }
     }
 }

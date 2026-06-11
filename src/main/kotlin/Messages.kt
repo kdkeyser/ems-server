@@ -2,7 +2,6 @@ package io.konektis
 
 import kotlinx.serialization.*
 import kotlinx.serialization.json.*
-import kotlin.random.Random
 
 // NOTE: every sealed subclass below pins an explicit @SerialName. kotlinx-serialization
 // otherwise defaults the polymorphic "type" discriminator to the fully-qualified class name,
@@ -70,14 +69,4 @@ fun deserializeMessage(json: String): Message {
 
 fun deserializeClientMessage(json: String): ClientMessage {
     return Json.decodeFromString<ClientMessage>(json)
-}
-fun randomPowerUsageUpdate(): Message {
-    return Message.PowerUsageUpdate(
-        listOf(
-            Update(Devices.SOLAR, Random.nextInt(-5000, 0)),
-            Update(Devices.BATTERY, Random.nextInt(-5000, 5000)),
-            Update(Devices.CAR_CHARGER, Random.nextInt(0, 7500)),
-            Update(Devices.HEATPUMP, Random.nextInt(0, 5000)),
-            Update(Devices.GRID, Random.nextInt(-5000, 5000))
-        ))
 }

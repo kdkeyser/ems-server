@@ -27,7 +27,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
-import org.jetbrains.exposed.sql.Database
 
 suspend fun main(args: Array<String>) {
     Main().main(args)
@@ -94,7 +93,7 @@ class Main : Klogging {
                 val server = embeddedServer(Netty, port = 8080) {
                     module(
                         energyManager, config.websocket, dataCollector.statusStateFlow,
-                        component.ocppService, component.database,
+                        component.ocppService,
                         component.historyRepository, config.clickhouse,
                     )
                 }
@@ -107,17 +106,15 @@ class Main : Klogging {
 
 fun Application.module(
     energyManager: EnergyManager, wsConfig: WebSocketConfig, statusFlow: Flow<StatusState?>,
-    ocppService: io.konektis.ocpp.OcppService, database: Database,
+    ocppService: io.konektis.ocpp.OcppService,
     historyRepository: HistoryRepository, clickhouse: ClickHouseConfig,
 ) {
     install(ContentNegotiation) { json() }
     configureSecurity(wsConfig)
-    configureAdministration()
     configureSockets(energyManager, wsConfig)
     configureStatusPage(statusFlow)
     configureOcppServer(ocppService)
     configureOcppWebUi(ocppService, energyManager)
-    configureDatabases(database)
     configureHistoryAuthenticated(clickhouse, historyRepository)
     configureMonitoring()
     configureHTTP()

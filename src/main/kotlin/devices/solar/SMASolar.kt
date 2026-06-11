@@ -29,7 +29,7 @@ class SMASolar(private val host: String) : NoCoLogging, Solar {
         val power = Endian.Big.intFrom(result.registers,0)
         // SMA returns Int.MIN_VALUE when the inverter is off (no sunlight); treat as 0W.
         // NOTE: production is reported POSITIVE here — the documented exception to the
-        // negative-=-producing convention (the app and EMSState consumers expect it this way).
+        // negative = producing convention (the app and EMSState consumers expect it this way).
         return SolarState(Watt(if (power > 0) power else 0 ))
     }
 

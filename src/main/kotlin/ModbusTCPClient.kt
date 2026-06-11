@@ -18,9 +18,9 @@ class ModbusTCPClient(private val host: String) : NoCoLogging {
             cfg.hostname = host
             cfg.port = 502
         }
-        val modbusClient = ModbusTcpClient.create(transport)
-        modbusClient.connect()
-        return modbusClient
+        // No connect() here: withClient connects lazily, so constructing device drivers at startup
+        // succeeds even while the device is offline.
+        return ModbusTcpClient.create(transport)
     }
 
     suspend fun <T> withClient(f: (client: ModbusTcpClient) -> T): T = withContext(Dispatchers.IO) {
@@ -30,6 +30,7 @@ class ModbusTCPClient(private val host: String) : NoCoLogging {
                 f(client)
             } catch (e: Exception) {
                 logger.warn("Modbus connection error for $host, reconnecting: ${e.message}")
+                runCatching { client.disconnect() } // release the broken transport before replacing it
                 try { client = makeClient() } catch (_: Exception) { }
                 throw e
             }

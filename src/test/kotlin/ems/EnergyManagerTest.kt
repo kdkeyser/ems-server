@@ -31,6 +31,8 @@ import io.mockk.runs
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.time.TestTimeSource
+import kotlin.time.Duration.Companion.seconds
 
 private fun grid(power: Int?): Grid = mockk<Grid>().also {
     coEvery { it.update() } just runs
@@ -198,6 +200,36 @@ class EnergyManagerTest {
         val world = World(grid(-5000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
         manager(world).tick()
         coVerify { ch.setMaxChargerPower(Watt(0)) }
+    }
+
+    @Test fun `stale grid reading is treated as missing and triggers blind release`() = runTest {
+        val ts = TestTimeSource()
+        val staleMark = ts.markNow()
+        ts += 60.seconds // reading is now 60s old — well past STALE_AFTER
+        val g = mockk<Grid>().also {
+            coEvery { it.update() } just runs
+            coEvery { it.getState() } returns DeviceUpdate(staleMark, GridState(Watt(0), Volt(230u)))
+        }
+        val bat = battery(0)
+        val world = World(g, emptyMap(), emptyMap(), emptyMap(), mapOf("b" to bat))
+        val m = manager(world)
+        repeat(EnergyManager.BLIND_RELEASE_TICKS) { m.tick() }
+        coVerify(exactly = 1) { bat.releaseToInverter() }
+    }
+
+    @Test fun `reading just under the staleness threshold is still used`() = runTest {
+        val ts = TestTimeSource()
+        val freshMark = ts.markNow()
+        ts += 10.seconds // under the 15s threshold
+        val g = mockk<Grid>().also {
+            coEvery { it.update() } just runs
+            coEvery { it.getState() } returns DeviceUpdate(freshMark, GridState(Watt(600), Volt(230u)))
+        }
+        val bat = battery(200)
+        val world = World(g, emptyMap(), emptyMap(), emptyMap(), mapOf("b" to bat))
+        manager(world).tick()
+        // Degraded tier ran on the (fresh) reading: decideDegraded(600, 200) = 200 - 600 = -400
+        coVerify { bat.setChargingPower(Watt(-400)) }
     }
 
     @Test fun `loadChargerControl restores persisted fixed amps`() = runTest {

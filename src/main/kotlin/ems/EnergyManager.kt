@@ -11,6 +11,7 @@ import io.konektis.devices.World
 import io.konektis.devices.charger.ChargerConnection
 import io.konektis.devices.smartConsumers.ConsumeMode
 import io.konektis.ocpp.db.ChargerControlStore
+import io.konektis.devices.DeviceUpdate
 import io.konektis.history.TimestampedEmsState
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.time.delay
 import java.time.Duration
 import java.time.Instant
+import kotlin.time.Duration.Companion.seconds
 
 enum class Mode {
     AUTO, MANUAL
@@ -179,13 +181,17 @@ class EnergyManager(
         // keepalive (register 6000); not implemented. We simply stop sending setpoints.
     }
 
+    /** The reading, unless it is older than [STALE_AFTER] — then null, same as no reading at all. */
+    private fun <T> fresh(u: DeviceUpdate<T>?): T? =
+        u?.takeIf { it.collectedAt.elapsedNow() <= STALE_AFTER }?.update
+
     suspend fun buildEMSState(): EMSState {
-        val gridState = world.grid.getState()?.update
-        val solarStates = world.solar.values.mapNotNull { it.getState()?.update?.power?.value }
+        val gridState = fresh(world.grid.getState())
+        val solarStates = world.solar.values.mapNotNull { fresh(it.getState())?.power?.value }
         val solarPower = if (solarStates.isEmpty()) null else solarStates.sum()
-        val batteryState = world.batteries.values.firstOrNull()?.getState()?.update
-        val chargerState = world.chargers.values.firstOrNull()?.getState()?.update
-        val heatpumpState = world.smartConsumers.values.firstOrNull()?.getState()?.update
+        val batteryState = fresh(world.batteries.values.firstOrNull()?.getState())
+        val chargerState = fresh(world.chargers.values.firstOrNull()?.getState())
+        val heatpumpState = fresh(world.smartConsumers.values.firstOrNull()?.getState())
 
         return EMSState(
             gridPower = gridState?.power?.value,
@@ -287,5 +293,9 @@ class EnergyManager(
 
     companion object {
         const val BLIND_RELEASE_TICKS = 6  // ~30s at 5s cadence
+        /** Device readings older than this are treated as missing (a device's getState() retains the
+         *  last value forever after its update() starts throwing — without this cap the blind-release
+         *  failsafe would never fire when a device drops off the network). 3 missed 5s polls. */
+        val STALE_AFTER = 15.seconds
     }
 }

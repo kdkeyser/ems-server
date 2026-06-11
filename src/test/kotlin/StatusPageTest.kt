@@ -25,6 +25,7 @@ private fun ApplicationTestBuilder.installStatusPage(flow: kotlinx.coroutines.fl
             maxFrameSize = Long.MAX_VALUE
             masking = false
         }
+        configureSecurity(io.konektis.config.WebSocketConfig("admin", "secret"))
         configureStatusPage(flow)
     }
 }
@@ -32,9 +33,15 @@ private fun ApplicationTestBuilder.installStatusPage(flow: kotlinx.coroutines.fl
 class StatusPageTest {
 
     @Test
+    fun `GET slash status requires auth`() = testApplication {
+        installStatusPage(emptyFlow())
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/status").status)
+    }
+
+    @Test
     fun `GET slash status returns 200 with HTML content type`() = testApplication {
         installStatusPage(emptyFlow())
-        val response = client.get("/status")
+        val response = client.get("/status") { basicAuth("admin", "secret") }
         assertEquals(HttpStatusCode.OK, response.status)
         assertTrue(
             response.contentType()!!.match(ContentType.Text.Html),
@@ -45,7 +52,7 @@ class StatusPageTest {
     @Test
     fun `GET slash status response body contains EMS`() = testApplication {
         installStatusPage(emptyFlow())
-        val body = client.get("/status").bodyAsText()
+        val body = client.get("/status") { basicAuth("admin", "secret") }.bodyAsText()
         assertTrue(body.contains("EMS"), "Expected 'EMS' in response body")
     }
 

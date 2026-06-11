@@ -1,6 +1,7 @@
 package io.konektis.ocpp
 
 import io.konektis.config.OcppConfig
+import io.konektis.configureSecurity
 import io.konektis.ems.EnergyManager
 import io.konektis.ems.SurplusPriorityStrategy
 import io.konektis.ocpp.db.*
@@ -22,6 +23,7 @@ class OcppWebUiTest {
     private fun Application.testModule(): OcppService {
         install(WebSockets) { pingPeriod = 30.seconds; timeout = 60.seconds }
         install(ContentNegotiation) { json() }
+        configureSecurity(io.konektis.config.WebSocketConfig("admin", "secret"))
         val db = freshTestDb()
         val svc = OcppService(ChargePointStore(db), IdTagStore(db), TransactionStore(db),
             OcppConfig(true, 300, 60, autoProbeOnBoot = false)).also { it.initStores() }
@@ -34,9 +36,17 @@ class OcppWebUiTest {
     }
 
     @Test
+    fun rejectsUnauthenticatedRequests() = testApplication {
+        application { testModule() }
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/ocpp-ui").status)
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/ocpp-ui/api/state").status)
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/ocpp-ui/api/idtags").status)
+    }
+
+    @Test
     fun servesThePage() = testApplication {
         application { testModule() }
-        val resp = client.get("/ocpp-ui")
+        val resp = client.get("/ocpp-ui") { basicAuth("admin", "secret") }
         assertEquals(HttpStatusCode.OK, resp.status)
         assertTrue(resp.bodyAsText().contains("OCPP"))
     }
@@ -47,12 +57,13 @@ class OcppWebUiTest {
         application { svc = testModule() }
 
         val post = client.post("/ocpp-ui/api/idtags") {
+            basicAuth("admin", "secret")
             contentType(ContentType.Application.Json)
             setBody("""{"idTag":"TAG1","status":"Accepted"}""")
         }
         assertEquals(HttpStatusCode.OK, post.status)
 
-        val list = client.get("/ocpp-ui/api/idtags").bodyAsText()
+        val list = client.get("/ocpp-ui/api/idtags") { basicAuth("admin", "secret") }.bodyAsText()
         assertTrue(list.contains("TAG1"))
     }
 
@@ -60,11 +71,12 @@ class OcppWebUiTest {
     fun chargerControlRoundTripOverHttp() = testApplication {
         application { testModule() }
         val post = client.post("/ocpp-ui/api/chargepoints/CP1/charger-control") {
+            basicAuth("admin", "secret")
             contentType(ContentType.Application.Json)
             setBody("""{"mode":"FIXED","fixedAmps":20,"charging":false}""")
         }
         assertEquals(HttpStatusCode.OK, post.status)
-        val body = client.get("/ocpp-ui/api/chargepoints/CP1/charger-control").bodyAsText()
+        val body = client.get("/ocpp-ui/api/chargepoints/CP1/charger-control") { basicAuth("admin", "secret") }.bodyAsText()
         assertTrue(body.contains("FIXED"))
         assertTrue(body.contains("20"))
         assertTrue(body.contains("false"))
@@ -78,6 +90,7 @@ class OcppWebUiTest {
         svc.handleBootNotification("CP1", BootNotificationRequest("Acme", "X1")) // creates record (auto-accept on)
 
         val resp = client.post("/ocpp-ui/api/chargepoints/CP1/accepted") {
+            basicAuth("admin", "secret")
             contentType(ContentType.Application.Json)
             setBody("""{"accepted":false}""")
         }

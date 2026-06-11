@@ -5,6 +5,7 @@ import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.channels.consumeEach
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlin.time.Duration.Companion.seconds
@@ -24,11 +25,12 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
     routing {
         webSocket("/ws") {
 
-            var authenticated = false
+            // Shared across the collector coroutines below, which may run on different threads.
+            val authenticated = java.util.concurrent.atomic.AtomicBoolean(false)
 
             val job = launch {
                 emsStateFlow.collect { emsState ->
-                    if (authenticated) {
+                    if (authenticated.get()) {
                         val l = ArrayList<Update>()
                         if (emsState.gridPower != null) {
                             l.add(Update(Devices.GRID, emsState.gridPower))
@@ -58,7 +60,7 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
             // collector's initial emission is dropped while authenticated is still false.
             val modeJob = launch {
                 energyManager.modeFlow.collect { mode ->
-                    if (authenticated) {
+                    if (authenticated.get()) {
                         send(Json.encodeToString(Message.ModeUpdate(mode) as Message))
                     }
                 }
@@ -66,7 +68,7 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
 
             val chargingJob = launch {
                 energyManager.chargerControlFlow.collect { control ->
-                    if (authenticated) {
+                    if (authenticated.get()) {
                         send(Json.encodeToString(Message.ChargerControlUpdate(control) as Message))
                     }
                 }
@@ -76,7 +78,7 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
             // control, the current value is also sent explicitly on auth below (initial emission dropped).
             val carJob = launch {
                 energyManager.carSocFlow.collect { soc ->
-                    if (authenticated) {
+                    if (authenticated.get()) {
                         send(Json.encodeToString(Message.CarStateUpdate(soc) as Message))
                     }
                 }
@@ -89,19 +91,20 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
                         when (val message = deserializeClientMessage(text)) {
                             is ClientMessage.Authenticate -> {
                                 if (message.username == wsConfig.username && message.password == wsConfig.password) {
-                                    authenticated = true
+                                    authenticated.set(true)
                                     send(Json.encodeToString(Message.Authenticated(message.username) as Message))
                                     // Send the current mode immediately so the client reflects it on connect.
                                     send(Json.encodeToString(Message.ModeUpdate(energyManager.modeFlow.value) as Message))
                                     send(Json.encodeToString(Message.ChargerControlUpdate(energyManager.chargerControlFlow.value) as Message))
                                     send(Json.encodeToString(Message.CarStateUpdate(energyManager.carSocFlow.value) as Message))
                                 } else {
+                                    delay(1000) // slow down brute-force attempts
                                     send(Json.encodeToString(Message.Unauthorized(message.username) as Message))
                                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication failed"))
                                 }
                             }
                             is ClientMessage.SetMode -> {
-                                if (!authenticated) {
+                                if (!authenticated.get()) {
                                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication required"))
                                 } else {
                                     // The modeJob collector echoes the resulting ModeUpdate; no explicit send here.
@@ -111,14 +114,14 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
                                 }
                             }
                             is ClientMessage.SetCharging -> {
-                                if (!authenticated) {
+                                if (!authenticated.get()) {
                                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication required"))
                                 } else {
                                     energyManager.setCharging(message.control)
                                 }
                             }
                             else -> {
-                                if (!authenticated) {
+                                if (!authenticated.get()) {
                                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication required"))
                                 }
                             }

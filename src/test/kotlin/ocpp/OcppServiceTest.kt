@@ -148,6 +148,17 @@ class OcppServiceTest {
     }
 
     @Test
+    fun `initStores seeds the EMS idTag as Accepted`() = runTest {
+        val db = freshTestDb()
+        val svc = OcppService(
+            ChargePointStore(db), IdTagStore(db), TransactionStore(db),
+            OcppConfig(true, 300, 60, acceptUnknownChargePoints = true, autoProbeOnBoot = false),
+        ).also { it.initStores() }
+        val tag = svc.listIdTags().single { it.idTag == "EMS" }
+        assertEquals("Accepted", tag.status)
+    }
+
+    @Test
     fun previouslyAcceptedChargePointStaysAcceptedWithAutoAcceptOff() = runTest {
         val db = freshTestDb()
         // First boot with auto-accept on: CPX gets accepted + persisted.

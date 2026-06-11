@@ -85,6 +85,10 @@ class OcppMessageHandler(private val service: OcppService) {
     }
 
     private suspend fun handleCall(chargePointId: String, uniqueId: String, action: String, payload: JsonObject): String {
+        val gated = action != Action.BootNotification.name && action != Action.Heartbeat.name
+        if (gated && !service.isCallAllowed(chargePointId)) {
+            return errorResponse(uniqueId, ErrorCode.SecurityError, "Charge point not accepted")
+        }
         val responsePayload: JsonObject = when (action) {
             Action.BootNotification.name ->
                 json.encodeToJsonElement(service.handleBootNotification(chargePointId, json.decodeFromJsonElement(payload))).jsonObject

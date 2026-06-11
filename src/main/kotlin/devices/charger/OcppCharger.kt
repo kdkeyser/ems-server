@@ -37,7 +37,7 @@ class OcppCharger(
     private val chargePointId: String,
     private val connectorId: Int,
     private val service: OcppService,
-    private val idTag: String = "EMS",
+    private val idTag: String = OcppService.EMS_ID_TAG,
 ) : Charger, Klogging {
 
     override suspend fun update() {

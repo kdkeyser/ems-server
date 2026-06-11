@@ -26,7 +26,7 @@ class OcppWebUiTest {
         configureSecurity(io.konektis.config.WebSocketConfig("admin", "secret"))
         val db = freshTestDb()
         val svc = OcppService(ChargePointStore(db), IdTagStore(db), TransactionStore(db),
-            OcppConfig(true, 300, 60, autoProbeOnBoot = false)).also { it.initStores() }
+            OcppConfig(true, 300, 60, acceptUnknownChargePoints = true, autoProbeOnBoot = false)).also { it.initStores() }
         val em = EnergyManager(
             io.konektis.devices.World(mockk(relaxed = true), emptyMap(), emptyMap(), emptyMap(), emptyMap()),
             mockk(relaxed = true), SurplusPriorityStrategy(), SqlChargerControlStore(db),

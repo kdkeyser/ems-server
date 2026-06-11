@@ -13,7 +13,7 @@ class OcppCapabilityTest {
         val db = freshTestDb()
         val store = ChargePointStore(db)
         val svc = OcppService(store, IdTagStore(db), TransactionStore(db),
-            OcppConfig(true, 300, 60, callTimeoutSeconds = 1, autoProbeOnBoot = false)).also { it.initStores() }
+            OcppConfig(true, 300, 60, callTimeoutSeconds = 1, acceptUnknownChargePoints = true, autoProbeOnBoot = false)).also { it.initStores() }
         return svc to store
     }
 

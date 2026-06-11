@@ -89,7 +89,7 @@ data class OcppConfig(
     val heartbeatInterval: Int,
     val connectionTimeout: Int,
     val callTimeoutSeconds: Int = 30,
-    val acceptUnknownChargePoints: Boolean = true,
+    val acceptUnknownChargePoints: Boolean = false,
     val acceptUnknownIdTags: Boolean = true,
     val autoProbeOnBoot: Boolean = true,
 )

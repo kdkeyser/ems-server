@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
@@ -88,6 +89,9 @@ class OcppService(
     fun initStores() {
         chargePoints.init(); idTags.init(); transactions.init()
         transactionIdCounter.set(transactions.maxTransactionId() + 1)
+        // The EMS authorises its own RemoteStartTransactions with this tag; seed it so charging
+        // keeps working even when acceptUnknownIdTags is turned off.
+        runBlocking { if (idTags.get(EMS_ID_TAG) == null) idTags.put(EMS_ID_TAG, "Accepted") }
     }
 
     fun getSession(id: String): ChargePointSession? = sessions[id]
@@ -243,6 +247,13 @@ class OcppService(
     fun isPowerControlCapable(chargePointId: String): Boolean =
         sessions[chargePointId]?.smartChargingSupported == true
 
+    /** True when actions beyond BootNotification/Heartbeat may be processed: the charge point was
+     *  accepted in this session, or is persisted as accepted (covers reconnects without a fresh boot). */
+    suspend fun isCallAllowed(chargePointId: String): Boolean {
+        if (sessions[chargePointId]?.registrationStatus == RegistrationStatus.Accepted) return true
+        return chargePoints.get(chargePointId)?.accepted == true
+    }
+
     suspend fun listChargePoints() = chargePoints.all()
     suspend fun setChargePointAccepted(id: String, accepted: Boolean) = chargePoints.setAccepted(id, accepted)
     suspend fun listIdTags() = idTags.all()
@@ -381,4 +392,9 @@ class OcppService(
 
     private fun currentTimestamp(): String =
         Instant.now().atOffset(ZoneOffset.UTC).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+
+    companion object {
+        /** idTag the EMS uses for transactions it starts itself. Seeded as Accepted at startup. */
+        const val EMS_ID_TAG = "EMS"
+    }
 }

@@ -13,7 +13,7 @@ class OcppCorrelationTest {
 
     private fun newService(timeoutSec: Int = 1): OcppService {
         val db = freshTestDb()
-        val cfg = OcppConfig(true, 300, 60, callTimeoutSeconds = timeoutSec)
+        val cfg = OcppConfig(true, 300, 60, callTimeoutSeconds = timeoutSec, acceptUnknownChargePoints = true)
         return OcppService(ChargePointStore(db), IdTagStore(db), TransactionStore(db), cfg)
             .also { it.initStores() }
     }

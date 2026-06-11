@@ -25,7 +25,7 @@ private fun Application.configureTestOcppServer() {
     }
     val db = io.konektis.ocpp.freshTestDb()
     val cfg = OcppConfig(enabled = true, heartbeatInterval = 300, connectionTimeout = 60,
-        callTimeoutSeconds = 1, autoProbeOnBoot = false)
+        callTimeoutSeconds = 1, acceptUnknownChargePoints = true, autoProbeOnBoot = false)
     val service = OcppService(ChargePointStore(db), IdTagStore(db), TransactionStore(db), cfg)
         .also { it.initStores() }
     configureOcppServer(service)
@@ -123,6 +123,10 @@ class OcppServerTest {
         }
 
         client.webSocket("/ocpp/TEST003", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
+            // Boot first so the charge point is accepted and gated actions are allowed.
+            send(Frame.Text("""[2,"boot","BootNotification",{"chargePointVendor":"V","chargePointModel":"M"}]"""))
+            incoming.receive() // discard boot response
+
             // Send Authorize
             val authorize = buildJsonArray {
                 add(2) // CALL
@@ -161,6 +165,10 @@ class OcppServerTest {
         }
 
         client.webSocket("/ocpp/TEST004", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
+            // Boot first so the charge point is accepted and gated actions are allowed.
+            send(Frame.Text("""[2,"boot","BootNotification",{"chargePointVendor":"V","chargePointModel":"M"}]"""))
+            incoming.receive() // discard boot response
+
             // Send StartTransaction
             val startTransaction = buildJsonArray {
                 add(2) // CALL
@@ -203,6 +211,10 @@ class OcppServerTest {
         }
 
         client.webSocket("/ocpp/TEST005", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
+            // Boot first so the charge point is accepted and gated actions are allowed.
+            send(Frame.Text("""[2,"boot","BootNotification",{"chargePointVendor":"V","chargePointModel":"M"}]"""))
+            incoming.receive() // discard boot response
+
             // First start a transaction
             val startTransaction = buildJsonArray {
                 add(2)
@@ -256,6 +268,10 @@ class OcppServerTest {
         }
 
         client.webSocket("/ocpp/TEST006", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
+            // Boot first so the charge point is accepted and gated actions are allowed.
+            send(Frame.Text("""[2,"boot","BootNotification",{"chargePointVendor":"V","chargePointModel":"M"}]"""))
+            incoming.receive() // discard boot response
+
             // Send StatusNotification
             val statusNotification = buildJsonArray {
                 add(2)
@@ -291,6 +307,10 @@ class OcppServerTest {
         }
 
         client.webSocket("/ocpp/TEST007", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
+            // Boot first so the charge point is accepted and gated actions are allowed.
+            send(Frame.Text("""[2,"boot","BootNotification",{"chargePointVendor":"V","chargePointModel":"M"}]"""))
+            incoming.receive() // discard boot response
+
             // Send MeterValues
             val meterValues = buildJsonArray {
                 add(2)
@@ -340,6 +360,10 @@ class OcppServerTest {
         }
 
         client.webSocket("/ocpp/TEST008", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
+            // Boot first so the charge point is accepted and gated actions are allowed.
+            send(Frame.Text("""[2,"boot","BootNotification",{"chargePointVendor":"V","chargePointModel":"M"}]"""))
+            incoming.receive() // discard boot response
+
             // Send unsupported action
             val unsupportedAction = buildJsonArray {
                 add(2)
@@ -442,6 +466,10 @@ class OcppServerTest {
         }
 
         client.webSocket("/ocpp/TEST010", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
+            // Boot first so the charge point is accepted and gated actions are allowed.
+            send(Frame.Text("""[2,"boot","BootNotification",{"chargePointVendor":"V","chargePointModel":"M"}]"""))
+            incoming.receive() // discard boot response
+
             // Send DataTransfer
             val dataTransfer = buildJsonArray {
                 add(2)
@@ -463,9 +491,39 @@ class OcppServerTest {
             // Verify response
             assertEquals(3, responseArray[0].jsonPrimitive.int) // CALLRESULT
             assertEquals("10", responseArray[1].jsonPrimitive.content)
-            
+
             val payload = responseArray[2].jsonObject
             assertEquals("Accepted", payload["status"]?.jsonPrimitive?.content)
+        }
+    }
+
+    @Test
+    fun pendingChargePointGetsSecurityErrorForGatedActions() = testApplication {
+        application {
+            install(WebSockets) {
+                pingPeriod = 30.seconds
+                timeout = 60.seconds
+                maxFrameSize = Long.MAX_VALUE
+                masking = false
+            }
+            val db = io.konektis.ocpp.freshTestDb()
+            val cfg = OcppConfig(enabled = true, heartbeatInterval = 300, connectionTimeout = 60,
+                callTimeoutSeconds = 1, acceptUnknownChargePoints = false, autoProbeOnBoot = false)
+            val service = OcppService(ChargePointStore(db), IdTagStore(db), TransactionStore(db), cfg)
+                .also { it.initStores() }
+            configureOcppServer(service)
+        }
+        val client = createClient { install(ClientWebSockets) }
+        client.webSocket("/ocpp/ROGUE", request = { header(HttpHeaders.SecWebSocketProtocol, "ocpp1.6") }) {
+            // BootNotification is allowed but answered Pending (charge point unknown, auto-accept off).
+            send(Frame.Text("""[2,"1","BootNotification",{"chargePointVendor":"X","chargePointModel":"Y"}]"""))
+            val boot = Json.parseToJsonElement((incoming.receive() as Frame.Text).readText()).jsonArray
+            assertEquals("Pending", boot[2].jsonObject["status"]?.jsonPrimitive?.content)
+            // StatusNotification is gated: a non-accepted charge point gets CALL_ERROR SecurityError.
+            send(Frame.Text("""[2,"2","StatusNotification",{"connectorId":1,"errorCode":"NoError","status":"Available"}]"""))
+            val err = Json.parseToJsonElement((incoming.receive() as Frame.Text).readText()).jsonArray
+            assertEquals(4, err[0].jsonPrimitive.int) // CALL_ERROR
+            assertEquals("SecurityError", err[2].jsonPrimitive.content)
         }
     }
 }

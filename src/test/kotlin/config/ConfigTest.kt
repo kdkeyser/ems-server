@@ -4,6 +4,17 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+
+private fun warnCfg(
+    websocket: WebSocketConfig = WebSocketConfig("user", "s3cret"),
+    devices: Devices = Devices(),
+) = Config(
+    grid = Grid(GridMeterType.P1HomeWizard, GridType.Phase1, "host"),
+    devices = devices,
+    ocpp = OcppConfig(true, 300, 60),
+    websocket = websocket,
+)
 
 class ConfigTest {
     @Test
@@ -71,6 +82,23 @@ class ConfigTest {
         assertEquals("clickhouse", config.clickhouse.host)
         assertEquals(8123, config.clickhouse.port)
         assertEquals("ems", config.clickhouse.database)
+    }
+
+    @Test fun `startupWarnings flags the default password`() {
+        val warnings = warnCfg(websocket = WebSocketConfig("user", "password")).startupWarnings()
+        assertTrue(warnings.any { it.contains("password") })
+    }
+
+    @Test fun `startupWarnings is empty for a sane config`() {
+        assertTrue(warnCfg().startupWarnings().isEmpty())
+    }
+
+    @Test fun `startupWarnings flags multiple chargers`() {
+        val two = Devices(charger = listOf(
+            Charger(ChargerType.OCPP, "a", chargePointId = "A", chargingCurrent = ChargingCurrent(6.0, 32.0)),
+            Charger(ChargerType.OCPP, "b", chargePointId = "B", chargingCurrent = ChargingCurrent(6.0, 32.0)),
+        ))
+        assertTrue(warnCfg(devices = two).startupWarnings().any { it.contains("Multiple chargers") })
     }
 
     @Test

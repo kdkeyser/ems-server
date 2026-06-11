@@ -7,6 +7,7 @@ import io.klogging.rendering.RENDER_SIMPLE
 import io.klogging.sending.STDOUT
 import io.konektis.config.ClickHouseConfig
 import io.konektis.config.loadConfig
+import io.konektis.config.startupWarnings
 import io.konektis.config.WebSocketConfig
 import io.konektis.history.HistoryRepository
 import io.konektis.history.configureHistoryAuthenticated
@@ -57,6 +58,7 @@ class Main : Klogging {
         if (config.devices.heatPump.isNotEmpty())
             logger.info("Heat pumps: ${config.devices.heatPump.joinToString { "${it.name} @ ${it.host}" }}")
         logger.info("Refresh interval: 5s, threads: ${config.refreshThreads}")
+        config.startupWarnings().forEach { logger.warn(it) }
 
         // Create the DI component
         val component = AppComponent::class.create(config)

@@ -29,7 +29,8 @@ enum class Devices {
 }
 
 @Serializable
-// power: negative = producing/exporting, positive = consuming/importing
+// power: negative = producing/exporting, positive = consuming/importing.
+// Exception: SOLAR is positive while producing (see CLAUDE.md "Power Sign Convention").
 data class Update(val device: Devices, val power: Int)
 
 @Serializable

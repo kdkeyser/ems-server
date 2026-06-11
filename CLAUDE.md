@@ -60,6 +60,8 @@ See [docs/adding-grafana-dashboards.md](docs/adding-grafana-dashboards.md) for t
 
 All `power: Int` fields in `EMSState` and `Update` use: **negative = producing/exporting, positive = consuming/importing**. Grid power from the P1 meter follows this directly.
 
+**Exception — solar:** `solarPower` is reported as **positive watts while producing** (SMA register 30775 is an unsigned production value, and the Android app renders it as-is). Do not feed `solarPower` into control math expecting the negative-producing convention.
+
 ## Key Quirks
 
 - **SMASolar**: when the inverter is off (no sunlight), Modbus register 30775 returns `Int.MIN_VALUE`. Treat as 0W.

@@ -2,15 +2,21 @@ package io.konektis
 
 import io.klogging.Klogging
 import io.konektis.devices.World
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
-class DataCollector(threads: Int, val world: World) : Klogging {
+class DataCollector(
+    threads: Int,
+    val world: World,
+    private val pollTimeoutMs: Long = 10_000,
+) : Klogging {
     private val workerPool = Executors.newFixedThreadPool(threads)
     private val dispatcher = workerPool.asCoroutineDispatcher()
     private val healthMap = ConcurrentHashMap<String, DeviceHealth>()
@@ -100,7 +106,12 @@ class DataCollector(threads: Int, val world: World) : Klogging {
 
     private suspend fun poll(name: String, category: String, block: suspend () -> DeviceHealth.Online): DeviceStatus {
         return try {
-            val health = block()
+            val health = withTimeout(pollTimeoutMs) { block() }
+            healthMap[name] = health
+            DeviceStatus(name, health, category)
+        } catch (e: TimeoutCancellationException) {
+            // A hung device must not stall the whole refresh cycle (awaitAll waits for every poll).
+            val health = DeviceHealth.Offline(previousLastSeen(name), "poll timed out after ${pollTimeoutMs}ms")
             healthMap[name] = health
             DeviceStatus(name, health, category)
         } catch (e: Exception) {

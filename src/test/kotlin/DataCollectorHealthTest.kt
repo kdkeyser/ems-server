@@ -23,6 +23,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.TimeSource
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 
 private fun makeWorld(
@@ -164,5 +165,18 @@ class DataCollectorHealthTest {
         collector.refresh()
 
         assertNull(collector.statusStateFlow.value!!.chargerConnection)
+    }
+
+    @Test
+    fun `hung device poll times out and is marked offline`() = runTest {
+        val solar = mockk<Solar>()
+        coEvery { solar.update() } coAnswers { awaitCancellation() } // never returns
+        coEvery { solar.getState() } returns null
+
+        val collector = DataCollector(1, makeWorld(solar = mapOf("Sunny Boy 4" to solar)), pollTimeoutMs = 100)
+        collector.refresh()
+
+        val health = collector.statusStateFlow.value!!.devices.first { it.name == "Sunny Boy 4" }.health
+        assertTrue(health is DeviceHealth.Offline)
     }
 }

@@ -25,10 +25,23 @@ clickhouse:
   host: clickhouse
   port: 8123
   database: ems
+  # user: default      # optional; defaults to the `default` user
+  # password: ""        # optional; set only if `default` (or your user) has a password
 ```
 
 When `enabled: false` (the default in `src/main/resources/config.yaml`) the writer is
 dormant and `GET /history` returns `503`.
+
+### Authentication
+
+The writer and the `GET /history` query path both authenticate to ClickHouse over HTTP
+Basic, using `clickhouse.user` / `clickhouse.password` (default: `default` with an empty
+password). The bundled `docker-compose.yml` mounts
+`deploy/clickhouse/users.d/default.xml`, which pins the `default` user to **passwordless,
+bridge-reachable** so the writer connects without credentials — recent ClickHouse images
+otherwise auto-generate a random `default` password, which makes every insert fail with
+`AUTHENTICATION_FAILED` (516). If you set a password on `default` (or point at a dedicated
+user), set `clickhouse.password` (and `clickhouse.user`) to match.
 
 ## Schema and retention
 

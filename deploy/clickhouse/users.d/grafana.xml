@@ -1,9 +1,21 @@
 <clickhouse>
+    <profiles>
+        <!--
+          readonly=2 allows read-only queries that may still change *session settings* (the Grafana
+          ClickHouse datasource sets max_execution_time on every query). The stock `readonly` profile
+          uses readonly=1, which forbids any settings change and rejects every Grafana query with
+          "code: 164, Cannot modify 'max_execution_time' setting in readonly mode". readonly=2 still
+          blocks all data/DDL modification, so the grafana user stays effectively read-only.
+        -->
+        <grafana_readonly>
+            <readonly>2</readonly>
+        </grafana_readonly>
+    </profiles>
     <users>
         <grafana>
             <password from_env="GRAFANA_CH_PASSWORD"/>
             <networks><ip>::/0</ip></networks>
-            <profile>readonly</profile>
+            <profile>grafana_readonly</profile>
             <quota>default</quota>
             <!-- ems = the history data; system = lets Grafana's datasource browse schema (read-only) -->
             <allow_databases>

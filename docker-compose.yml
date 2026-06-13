@@ -44,6 +44,7 @@ services:
       - clickhouse-data:/var/lib/clickhouse
       - ./deploy/clickhouse-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./deploy/clickhouse/users.d/grafana.xml:/etc/clickhouse-server/users.d/grafana.xml:ro
+      - ./deploy/clickhouse/users.d/default.xml:/etc/clickhouse-server/users.d/default.xml:ro
     ulimits:
       nofile:
         soft: 262144

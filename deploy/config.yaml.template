@@ -61,4 +61,8 @@ clickhouse:
   host: clickhouse
   port: 8123
   database: ems
+  # Defaults to the `default` user with no password (passwordless `default` over the trusted
+  # Docker bridge). Set these only if you give ClickHouse a password.
+  # user: default
+  # password: ""
 

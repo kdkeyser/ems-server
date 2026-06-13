@@ -1,0 +1,19 @@
+<clickhouse>
+    <!--
+      The EMS HistoryWriter POSTs inserts to http://clickhouse:8123/ with no credentials, so it can
+      only connect as a passwordless `default` user. Recent ClickHouse images auto-generate a random
+      password for `default` on first start (users.d/default-password.xml, a <password_sha256_hex>),
+      which makes every insert fail with AUTHENTICATION_FAILED (516). We replace the whole `default`
+      user node so any generated password is discarded: empty password, reachable from the Docker
+      bridge. replace="replace" + the filename sorting after default-password.xml ensures this wins.
+      This network is not exposed outside the host.
+    -->
+    <users>
+        <default replace="replace">
+            <password></password>
+            <networks><ip>::/0</ip></networks>
+            <profile>default</profile>
+            <quota>default</quota>
+        </default>
+    </users>
+</clickhouse>

@@ -71,6 +71,25 @@ class HistoryWriterTest {
     }
 
     @Test
+    fun flushSendsConfiguredCredentialsAsBasicAuth() = runTest {
+        var authHeader: String? = null
+        val engine = MockEngine { req ->
+            authHeader = req.headers[io.ktor.http.HttpHeaders.Authorization]
+            respond("")
+        }
+        val writer = HistoryWriter(
+            ClickHouseConfig(enabled = true, user = "ems", password = "s3cret"),
+            HttpClient(engine),
+        )
+        writer.enqueue(row(1749456000))
+        writer.flushOnce()
+
+        val expected = "Basic " + java.util.Base64.getEncoder()
+            .encodeToString("ems:s3cret".toByteArray())
+        assertEquals(expected, authHeader)
+    }
+
+    @Test
     fun disabledWriterIgnoresEnqueueAndFlush() = runTest {
         val captured = mutableListOf<String>()
         val writer = HistoryWriter(ClickHouseConfig(enabled = false), mockClient(captured))

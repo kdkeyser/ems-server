@@ -3,9 +3,11 @@ package io.konektis.history
 import io.klogging.Klogging
 import io.konektis.config.ClickHouseConfig
 import io.ktor.client.HttpClient
+import io.ktor.client.request.basicAuth
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
@@ -70,13 +72,23 @@ class HistoryWriter(
 
         val sql = buildInsertSql(config.database, batch)
         val ok = runCatching {
-            val resp: HttpResponse = http.post(url) { setBody(sql) }
+            val resp: HttpResponse = http.post(url) {
+                basicAuth(config.user, config.password)
+                setBody(sql)
+            }
+            // A non-2xx is not an exception; log ClickHouse's own error text so the cause is visible
+            // (e.g. AUTHENTICATION_FAILED, missing table) instead of only the generic re-queue warning.
+            if (!resp.status.isSuccess()) {
+                logger.warn("ClickHouse insert rejected: ${resp.status} ${resp.bodyAsText()}")
+            }
             resp.status.isSuccess()
         }.getOrElse { e ->
             logger.warn(e, "ClickHouse insert failed: ${e.message}")
             false
         }
-        if (!ok) {
+        if (ok) {
+            logger.debug("Flushed ${batch.size} history rows to ClickHouse")
+        } else {
             pending.addAll(0, batch)
             while (pending.size > MAX_BUFFER) pending.removeFirst()
             logger.warn("Re-queued ${batch.size} history rows after failed flush (pending=${pending.size})")

@@ -73,6 +73,17 @@ On the next `docker compose up -d grafana` the updated JSON is loaded automatica
 5. Go to **Explore**, pick **EMS ClickHouse**, run `SELECT count() FROM ems.power_raw`
    — expect a number greater than zero.
 
+## Troubleshooting
+
+- **Panels show "code: 164, Cannot modify 'max_execution_time' setting in readonly mode"** —
+  the `grafana` ClickHouse user must use a `readonly=2` profile, not the stock `readonly`
+  (=1) profile. The datasource sets `max_execution_time` per query, which `readonly=1`
+  forbids. `deploy/clickhouse/users.d/grafana.xml` defines a `grafana_readonly` profile
+  (`<readonly>2</readonly>`) for this; `readonly=2` still blocks all data/DDL changes.
+- **Panels show no data but ClickHouse has rows** — confirm the EMS writer is actually
+  inserting (`SELECT count(), max(ts) FROM ems.power_raw`) and that the dashboard time
+  range covers when data started arriving.
+
 ## Security note
 
 Grafana is intentionally **not** added to the Cloudflare tunnel. The tunnel stays scoped

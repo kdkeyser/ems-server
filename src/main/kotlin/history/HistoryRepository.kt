@@ -2,6 +2,7 @@ package io.konektis.history
 
 import io.konektis.config.ClickHouseConfig
 import io.ktor.client.HttpClient
+import io.ktor.client.request.basicAuth
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.statement.HttpResponse
@@ -24,7 +25,10 @@ class HistoryRepository(
     suspend fun query(range: HistoryRange, resolution: HistoryResolution): HistoryResponse {
         val sql = buildSelectSql(config.database, range, resolution)
         val resp: HttpResponse = try {
-            http.get(url) { parameter("query", sql) }
+            http.get(url) {
+                basicAuth(config.user, config.password)
+                parameter("query", sql)
+            }
         } catch (e: Exception) {
             throw HistoryQueryException("ClickHouse unreachable: ${e.message}", e)
         }

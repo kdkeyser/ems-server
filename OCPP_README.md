@@ -1,248 +1,137 @@
 # OCPP 1.6J Server Implementation
 
-This project includes a complete OCPP 1.6J (Open Charge Point Protocol) server implementation using Ktor WebSockets.
+This project includes an OCPP 1.6J (Open Charge Point Protocol) Central System implementation
+built on Ktor WebSockets. Electric-vehicle charge points dial *in* to the server; the EMS reads
+their power and throttles their charging current to follow solar surplus.
 
-## Overview
+> **Operator guide.** For connecting and configuring a real charger (config fields, the `/ocpp-ui`
+> web page, capability detection, the Webasto hybrid fallback, troubleshooting), see
+> [docs/adding-an-ocpp-charger.md](docs/adding-an-ocpp-charger.md). This file is the
+> protocol/implementation reference for developers.
 
-The OCPP server allows electric vehicle charge points to connect and communicate using the OCPP 1.6J protocol over WebSocket connections.
+## Components
 
-## Architecture
-
-The implementation consists of three main components:
-
-### 1. OCPP Messages (`src/main/kotlin/ocpp/OcppMessages.kt`)
-- Complete data classes for all OCPP 1.6J message types
-- Support for Core Profile, Smart Charging, Remote Trigger, Firmware Management, and Reservation profiles
-- Serializable message structures using Kotlinx Serialization
-
-### 2. Session Manager (`src/main/kotlin/ocpp/OcppSessionManager.kt`)
-- Manages all active charge point connections
-- Tracks charge point state (connectors, transactions, configuration)
-- Handles incoming requests from charge points:
-  - BootNotification
-  - Heartbeat
-  - Authorize
-  - StartTransaction / StopTransaction
-  - StatusNotification
-  - MeterValues
-  - DataTransfer
-- Supports sending remote commands to charge points:
-  - RemoteStartTransaction
-  - RemoteStopTransaction
-  - Reset
-
-### 3. WebSocket Server (`src/main/kotlin/ocpp/OcppServer.kt`)
-- Ktor-based WebSocket server
-- Message routing and processing
-- Error handling and validation
-- Support for multiple charge points simultaneously
+| File | Responsibility |
+|------|----------------|
+| [`ocpp/OcppMessages.kt`](src/main/kotlin/ocpp/OcppMessages.kt) | Serializable data classes for OCPP 1.6J message types (Core + Smart Charging + Remote Trigger), and the `Action` enum. |
+| [`ocpp/OcppServer.kt`](src/main/kotlin/ocpp/OcppServer.kt) | Ktor WebSocket endpoints, subprotocol negotiation, framing of the JSON-RPC array messages, and routing to the service. |
+| [`ocpp/OcppService.kt`](src/main/kotlin/ocpp/OcppService.kt) | DI singleton holding live session state (`StateFlow`); inbound handlers, request/response correlation, outbound commands, and runtime capability detection. |
+| [`ocpp/OcppWebUi.kt`](src/main/kotlin/ocpp/OcppWebUi.kt) | `/ocpp-ui` config + status web page, its live WebSocket, and the REST API. |
+| [`ocpp/db/`](src/main/kotlin/ocpp/db/) | SQLite persistence (Exposed): charge-point allow-list, idTags, per-charger control settings, and transactions. |
 
 ## WebSocket Endpoints
 
-The server exposes two WebSocket endpoints:
+The server exposes two endpoints, both requiring the `ocpp1.6` subprotocol:
 
-- `/ocpp/{chargePointId}` - Standard OCPP endpoint
-- `/ocpp/1.6/{chargePointId}` - Version-specific endpoint
+- `/ocpp/{chargePointId}` — standard OCPP endpoint
+- `/ocpp/1.6/{chargePointId}` — version-prefixed alternate path
 
-Where `{chargePointId}` is a unique identifier for each charge point.
+`{chargePointId}` uniquely identifies each charge point and must match the `chargePointId`
+configured under `devices.charger` in `config.yaml`.
 
 ## Configuration
-
-OCPP server configuration is in `src/main/resources/config.yaml`:
 
 ```yaml
 ocpp:
   enabled: true
-  heartbeatInterval: 300
+  heartbeatInterval: 300            # seconds, returned in BootNotification
   connectionTimeout: 60
+  callTimeoutSeconds: 30            # how long the server waits for a charger's reply
+  acceptUnknownChargePoints: false  # auto-accept a charger on first connect
+  acceptUnknownIdTags: true         # accept any idTag not on the allow-list
+  autoProbeOnBoot: true             # probe SupportedFeatureProfiles on boot
+
+database:
+  path: ems.db                      # SQLite store for allow-list / idTags / settings / transactions
 ```
 
 ## Message Format
 
-OCPP 1.6J uses JSON-RPC 2.0 over WebSocket with a specific array format:
+OCPP 1.6J uses a JSON array framing over WebSocket:
 
-### CALL (Request)
-```json
-[2, "unique-id", "Action", {"key": "value"}]
+```jsonc
+[2, "unique-id", "Action", { … }]                 // CALL (request)
+[3, "unique-id", { … }]                            // CALLRESULT (response)
+[4, "unique-id", "ErrorCode", "Description", {}]   // CALLERROR
 ```
 
-### CALLRESULT (Response)
-```json
-[3, "unique-id", {"key": "value"}]
-```
+## Supported Actions
 
-### CALLERROR (Error)
-```json
-[4, "unique-id", "ErrorCode", "Error Description", {}]
-```
+### Charge Point → Central System (inbound, handled in `OcppService`)
+- **BootNotification** — registration; returns `heartbeatInterval`
+- **Heartbeat** — keep-alive
+- **Authorize** — idTag authorization (against the allow-list / `acceptUnknownIdTags`)
+- **StartTransaction** / **StopTransaction** — charging-session lifecycle, persisted to SQLite
+- **StatusNotification** — connector status updates
+- **MeterValues** — live power; the EMS reads `Power.Active.Import`
+- **DataTransfer** — vendor-specific data (accepted)
 
-## Supported OCPP Actions
+### Central System → Charge Point (outbound commands)
+- **SetChargingProfile** / **ClearChargingProfile** — throttle / release charging current
+- **GetConfiguration** — used to probe `SupportedFeatureProfiles` (SmartCharging detection)
+- **RemoteStartTransaction** / **RemoteStopTransaction** — start/stop a session remotely
+- **Reset** — reboot the charge point (Soft/Hard)
+- **TriggerMessage** — ask the charger to send a specific message (e.g. MeterValues)
 
-### From Charge Point to Central System:
-- **BootNotification** - Charge point registration
-- **Heartbeat** - Keep-alive messages
-- **Authorize** - ID tag authorization
-- **StartTransaction** - Begin charging session
-- **StopTransaction** - End charging session
-- **StatusNotification** - Connector status updates
-- **MeterValues** - Energy consumption data
-- **DataTransfer** - Vendor-specific data
+## Capability Detection
 
-### From Central System to Charge Point:
-- **RemoteStartTransaction** - Start charging remotely
-- **RemoteStopTransaction** - Stop charging remotely
-- **Reset** - Reboot the charge point
-- **ChangeAvailability** - Change connector availability
-- **ChangeConfiguration** - Modify configuration
-- **GetConfiguration** - Retrieve configuration
-- **UnlockConnector** - Unlock a connector
+OCPP support varies by charger, so the server detects two capabilities at runtime:
 
-## Usage Example
+- **SmartCharging** — probed via `GetConfiguration("SupportedFeatureProfiles")` on boot
+  (`autoProbeOnBoot`). Required before the EMS can issue `SetChargingProfile`; without it,
+  throttling is a logged no-op.
+- **Power reading** — set once the charger reports a `Power.Active.Import` measurand in
+  `MeterValues`.
 
-### Connecting a Charge Point
+Both surface as pills on `/ocpp-ui`. When a charger lacks SmartCharging, run the Webasto
+Modbus hybrid setup described in the [operator guide](docs/adding-an-ocpp-charger.md#5-capability-detection-and-the-webasto-fallback).
 
-A charge point connects to:
-```
-ws://localhost:8080/ocpp/CP001
-```
+## Persistence
 
-### Boot Notification Example
+State lives in SQLite (Exposed) at `database.path`:
 
-Charge point sends:
-```json
-[2, "1", "BootNotification", {
-  "chargePointVendor": "VendorName",
-  "chargePointModel": "Model1",
-  "chargePointSerialNumber": "SN123456"
-}]
-```
+| Table | Contents |
+|-------|----------|
+| `ocpp_charge_points` | Allow-list / status of every charge point seen |
+| `ocpp_id_tags` | Authorized RFID idTags |
+| `ocpp_charger_control` | Per-charger control settings (Max A, EMS-auto) |
+| `ocpp_transactions` | Completed charging sessions |
 
-Server responds:
-```json
-[3, "1", {
-  "status": "Accepted",
-  "currentTime": "2025-11-16T15:00:00Z",
-  "interval": 300
-}]
-```
-
-### Start Transaction Example
-
-Charge point sends:
-```json
-[2, "2", "StartTransaction", {
-  "connectorId": 1,
-  "idTag": "USER001",
-  "meterStart": 0,
-  "timestamp": "2025-11-16T15:05:00Z"
-}]
-```
-
-Server responds:
-```json
-[3, "2", {
-  "transactionId": 1,
-  "idTagInfo": {
-    "status": "Accepted"
-  }
-}]
-```
-
-## Session Management
-
-The server maintains state for each connected charge point:
-- Connection status and last heartbeat
-- Connector states (Available, Charging, Faulted, etc.)
-- Active transactions
-- Configuration parameters
+A subtlety on restart: if the server (re)starts mid-charge, `StartTransaction` is not replayed,
+so the transaction counter is bumped past any charger-side ids recovered from `MeterValues` to
+avoid issuing duplicate transaction ids.
 
 ## Testing
 
-### Automated Test Suite
+Tests live in [`src/test/kotlin/ocpp/`](src/test/kotlin/ocpp/) (package `io.konektis.ocpp`):
 
-The project includes a comprehensive test suite with 28+ tests covering:
+- `OcppServerTest` — endpoint handshake, subprotocol, message routing
+- `OcppServiceTest` — inbound handlers, session state, allow-list / idTag behavior
+- `OcppCommandsTest` — outbound commands (SetChargingProfile, RemoteStart/Stop, Reset, …)
+- `OcppCorrelationTest` — request/response id correlation and timeouts
+- `OcppCapabilityTest` — SmartCharging / power-read capability detection
+- `OcppWebUiTest` — the `/ocpp-ui` REST API and live status feed
 
-**OcppServerTest** ([`src/test/kotlin/ocpp/OcppServerTest.kt`](src/test/kotlin/ocpp/OcppServerTest.kt:1)):
-- BootNotification handling
-- Heartbeat messages
-- Authorization requests
-- Transaction lifecycle (Start/Stop)
-- Status notifications
-- Meter values
-- Data transfer
-- Error handling (unsupported actions, invalid messages)
-- Multiple simultaneous charge points
+Run them:
 
-**OcppSessionManagerTest** ([`src/test/kotlin/ocpp/OcppSessionManagerTest.kt`](src/test/kotlin/ocpp/OcppSessionManagerTest.kt:1)):
-- Session registration/unregistration
-- Transaction management
-- Connector state tracking
-- Multiple connectors per charge point
-- Heartbeat tracking
-- Boot notification state updates
-
-Run the tests:
 ```bash
 ./gradlew test --tests "io.konektis.ocpp.*"
 ```
 
-### Manual Testing
-
-You can also test the OCPP server using:
-
-1. **OCPP Test Tools**:
-   - OCPP-J Test Client
-   - ChargeTime OCPP Simulator
-
-2. **WebSocket Clients**:
-   - wscat: `wscat -c ws://localhost:8080/ocpp/TEST001`
-   - Postman WebSocket feature
-
-3. **Example Test Message**:
-```bash
-wscat -c ws://localhost:8080/ocpp/TEST001
-> [2,"1","BootNotification",{"chargePointVendor":"Test","chargePointModel":"Model1"}]
-```
-
-## Running the Server
-
-```bash
-./gradlew run
-```
-
-The server will start on port 8080 (configurable in `application.yaml`).
-
-## Logging
-
-The server logs all OCPP messages and events to stdout:
-- `[INFO]` - Important events (connections, transactions)
-- `[DEBUG]` - Message details
-- `[WARN]` - Unsupported actions
-- `[ERROR]` - Errors and exceptions
-
-## Future Enhancements
-
-Potential improvements:
-1. Database persistence for transactions and meter values
-2. Authentication and authorization
-3. TLS/SSL support for secure WebSocket connections
-4. Advanced charging profiles and smart charging
-5. Firmware update management
-6. Local authorization list management
-7. Reservation system
-8. Comprehensive logging to database
-9. REST API for charge point management
-10. Web dashboard for monitoring
-
 ## Standards Compliance
 
-This implementation follows:
-- OCPP 1.6 JSON Specification
-- OCPP 1.6 Edition 2 (2019)
-- Core Profile (required)
-- Smart Charging Profile (partial)
-- Remote Trigger Profile (partial)
+- OCPP 1.6 JSON Specification (Edition 2, 2019)
+- Core Profile
+- Smart Charging Profile (SetChargingProfile / ClearChargingProfile)
+- Remote Trigger Profile (TriggerMessage)
 
-## License
+## Scope
 
-[Your License Here]
+- The OCPP endpoint and `/ocpp-ui` are **LAN-only** (no TLS/auth on `/ocpp`; `/ocpp-ui` uses the
+  shared HTTP Basic credentials). The deployment trusts the local network.
+- OCPP 2.0.1 is not supported.
+- Power is read from `Power.Active.Import`; deriving it from cumulative
+  `Energy.Active.Import.Register` is not implemented.
+- Long-term power history lives separately in ClickHouse — see
+  [docs/adding-clickhouse-history.md](docs/adding-clickhouse-history.md).
+</content>

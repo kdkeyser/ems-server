@@ -2,10 +2,7 @@ package io.konektis.ems
 
 import io.konektis.config.Config
 import io.konektis.devices.World
-import io.konektis.devices.battery.Battery
-import io.konektis.devices.charger.Charger
 import io.konektis.devices.grid.Grid
-import io.konektis.devices.smartConsumers.SmartConsumer
 import io.konektis.devices.solar.Solar
 import io.konektis.ocpp.db.ChargerControlStore
 import io.konektis.history.TimestampedEmsState
@@ -25,9 +22,9 @@ class EnergyManagerHistoryTapTest {
         return mockk<World> {
             every { this@mockk.grid } returns grid
             every { solar } returns emptyMap<String, Solar>()
-            every { batteries } returns emptyMap<String, Battery>()
-            every { chargers } returns emptyMap<String, Charger>()
-            every { smartConsumers } returns emptyMap<String, SmartConsumer>()
+            every { battery } returns null
+            every { charger } returns null
+            every { heatPump } returns null
         }
     }
 

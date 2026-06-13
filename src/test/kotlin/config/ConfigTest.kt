@@ -10,7 +10,7 @@ private fun warnCfg(
     websocket: WebSocketConfig = WebSocketConfig("user", "s3cret"),
     devices: Devices = Devices(),
 ) = Config(
-    grid = Grid(GridMeterType.P1HomeWizard, GridType.Phase1, "host"),
+    grid = Grid(GridMeterType.P1HomeWizard, "host"),
     devices = devices,
     ocpp = OcppConfig(true, 300, 60),
     websocket = websocket,
@@ -38,7 +38,6 @@ class ConfigTest {
         val yaml = """
             grid:
               type: P1HomeWizard
-              gridType: Phase3_400V
               host: 10.9.9.9
             devices:
               charger:
@@ -93,20 +92,11 @@ class ConfigTest {
         assertTrue(warnCfg().startupWarnings().isEmpty())
     }
 
-    @Test fun `startupWarnings flags multiple chargers`() {
-        val two = Devices(charger = listOf(
-            Charger(ChargerType.OCPP, "a", chargePointId = "A", chargingCurrent = ChargingCurrent(6.0, 32.0)),
-            Charger(ChargerType.OCPP, "b", chargePointId = "B", chargingCurrent = ChargingCurrent(6.0, 32.0)),
-        ))
-        assertTrue(warnCfg(devices = two).startupWarnings().any { it.contains("Multiple chargers") })
-    }
-
     @Test
     fun clickHouseLoadsFromFile() {
         val yaml = """
             grid:
               type: P1HomeWizard
-              gridType: Phase3_400V
               host: 10.9.9.9
             devices:
               charger:

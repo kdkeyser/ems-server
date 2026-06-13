@@ -3,11 +3,13 @@ package io.konektis.ems
 import io.konektis.ChargerControl
 import io.konektis.ChargerMode
 import io.konektis.GlobalTimeSource
+import io.konektis.ManagerMode
 import io.konektis.config.ChargingCurrent
 import io.konektis.config.Config
 import io.konektis.config.Charger as ChargerConfig
 import io.konektis.config.ChargerType
 import io.konektis.config.Devices as DevicesConfig
+import io.konektis.devices.Ampere
 import io.konektis.devices.DeviceUpdate
 import io.konektis.devices.Volt
 import io.konektis.devices.Watt
@@ -15,6 +17,7 @@ import io.konektis.devices.World
 import io.konektis.devices.battery.Battery
 import io.konektis.devices.battery.BatteryState
 import io.konektis.devices.charger.Charger
+import io.konektis.devices.charger.ChargerCommand
 import io.konektis.devices.charger.ChargerConnection
 import io.konektis.devices.charger.ChargerState
 import io.konektis.devices.grid.Grid
@@ -77,8 +80,7 @@ class EnergyManagerTest {
         val bat = battery(0)
         // grid -3000 exporting, charger 0, heat pump 0 -> charger gets 13A (2990W).
         // Battery balances the MEASURED grid: target = 0 - (-3000) = +3000W.
-        val world = World(grid(-3000), mapOf("c" to charger(0)), emptyMap(),
-            mapOf("h" to heatpump(0)), mapOf("b" to bat))
+        val world = World(grid(-3000), charger(0), emptyMap(), heatpump(0), bat)
         manager(world).tick()
         coVerify { bat.setChargingPower(Watt(3000)) }
     }
@@ -86,8 +88,7 @@ class EnergyManagerTest {
     @Test fun `tier2 missing heatpump still balances battery on grid`() = runTest {
         val bat = battery(200)
         // charger present, heat pump missing → degraded; decideDegraded(600,200)=200-600=-400
-        val world = World(grid(600), mapOf("c" to charger(0)), emptyMap(),
-            emptyMap(), mapOf("b" to bat))
+        val world = World(grid(600), charger(0), emptyMap(), null, bat)
         manager(world).tick()
         coVerify { bat.setChargingPower(Watt(-400)) }
     }
@@ -96,14 +97,14 @@ class EnergyManagerTest {
         val ch = charger(0)
         val bat = battery(0)
         // heat pump missing → tier2; charger must not be commanded
-        val world = World(grid(0), mapOf("c" to ch), emptyMap(), emptyMap(), mapOf("b" to bat))
+        val world = World(grid(0), ch, emptyMap(), null, bat)
         manager(world).tick()
-        coVerify(exactly = 0) { ch.setMaxChargerPower(any()) }
+        coVerify(exactly = 0) { ch.apply(any()) }
     }
 
     @Test fun `blind releases from the 6th tick onward`() = runTest {
         val bat = battery(0)
-        val world = World(grid(null), emptyMap(), emptyMap(), emptyMap(), mapOf("b" to bat))
+        val world = World(grid(null), null, emptyMap(), null, bat)
         val m = manager(world)
         repeat(5) { m.tick() }
         coVerify(exactly = 0) { bat.releaseToInverter() }
@@ -123,7 +124,7 @@ class EnergyManagerTest {
                 null, null, null
             )
         }
-        val world = World(g, emptyMap(), emptyMap(), emptyMap(), mapOf("b" to bat))
+        val world = World(g, null, emptyMap(), null, bat)
         val m = manager(world)
         repeat(7) { m.tick() }
         coVerify(exactly = 0) { bat.releaseToInverter() } // never 6 consecutive blind
@@ -131,11 +132,11 @@ class EnergyManagerTest {
 
     @Test fun `switching to MANUAL releases battery once`() = runTest {
         val bat = battery(0)
-        val world = World(grid(-1000), mapOf("c" to charger(0)), emptyMap(), emptyMap(), mapOf("b" to bat))
+        val world = World(grid(-1000), charger(0), emptyMap(), null, bat)
         val m = manager(world)
         m.tick()                       // AUTO
         clearMocks(bat, answers = false, recordedCalls = true)
-        m.setMode(Mode.MANUAL)
+        m.setMode(ManagerMode.MANUAL)
         m.tick()                       // transition → release
         coVerify(exactly = 1) { bat.releaseToInverter() }
         m.tick()                       // stays manual, no further release
@@ -143,7 +144,7 @@ class EnergyManagerTest {
     }
 
     @Test fun `setCharging updates chargerControlFlow`() = runTest {
-        val world = World(grid(0), mapOf("c" to charger(0)), emptyMap(), emptyMap(), mapOf("b" to battery(0)))
+        val world = World(grid(0), charger(0), emptyMap(), null, battery(0))
         val m = manager(world)
         m.setCharging(ChargerControl(charging = false))
         assertEquals(false, m.chargerControlFlow.value.charging)
@@ -152,42 +153,42 @@ class EnergyManagerTest {
     @Test fun `stop forces charger to zero amps in AUTO`() = runTest {
         val ch = charger(0)
         // Strong export would normally give the charger surplus amps; Stop overrides to 0.
-        val world = World(grid(-5000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
+        val world = World(grid(-5000), ch, emptyMap(), heatpump(0), battery(0))
         val m = manager(world)
         m.setCharging(ChargerControl(ChargerMode.SOLAR, 16, charging = false))
         m.tick()
-        coVerify { ch.setMaxChargerPower(Watt(0)) }
+        coVerify { ch.apply(ChargerCommand.Stop) }
     }
 
     @Test fun `fixed mode sets clamped amps in AUTO`() = runTest {
         val ch = charger(0)
-        val world = World(grid(0), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
+        val world = World(grid(0), ch, emptyMap(), heatpump(0), battery(0))
         val m = manager(world)
         m.setCharging(ChargerControl(ChargerMode.FIXED, 16, true))
         m.tick()
-        coVerify { ch.setMaxChargerPower(Watt(16 * 230)) }
+        coVerify { ch.apply(ChargerCommand.Charge(Ampere(16))) }
     }
 
     @Test fun `MANUAL auto-reverts solar to fixed, battery untouched`() = runTest {
         val ch = charger(0)
         val bat = battery(0)
-        val world = World(grid(-3000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to bat))
+        val world = World(grid(-3000), ch, emptyMap(), heatpump(0), bat)
         val m = manager(world)
-        m.setMode(Mode.MANUAL)
+        m.setMode(ManagerMode.MANUAL)
         m.setCharging(ChargerControl(ChargerMode.SOLAR, 16, true)) // solar is meaningless in MANUAL -> fixed 16A
         m.tick()
-        coVerify { ch.setMaxChargerPower(Watt(16 * 230)) }
+        coVerify { ch.apply(ChargerCommand.Charge(Ampere(16))) }
         coVerify(exactly = 0) { bat.setChargingPower(any()) }
     }
 
     @Test fun `stop forces zero in MANUAL`() = runTest {
         val ch = charger(0)
-        val world = World(grid(-3000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
+        val world = World(grid(-3000), ch, emptyMap(), heatpump(0), battery(0))
         val m = manager(world)
-        m.setMode(Mode.MANUAL)
+        m.setMode(ManagerMode.MANUAL)
         m.setCharging(ChargerControl(charging = false))
         m.tick()
-        coVerify { ch.setMaxChargerPower(Watt(0)) }
+        coVerify { ch.apply(ChargerCommand.Stop) }
     }
 
     @Test fun `no car connected forces charger to zero despite surplus`() = runTest {
@@ -197,9 +198,9 @@ class EnergyManagerTest {
                 ChargerState(Watt(0), ChargerConnection.NotConnected)
             )
         }
-        val world = World(grid(-5000), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
+        val world = World(grid(-5000), ch, emptyMap(), heatpump(0), battery(0))
         manager(world).tick()
-        coVerify { ch.setMaxChargerPower(Watt(0)) }
+        coVerify { ch.apply(ChargerCommand.Stop) }
     }
 
     @Test fun `stale grid reading is treated as missing and triggers blind release`() = runTest {
@@ -211,7 +212,7 @@ class EnergyManagerTest {
             coEvery { it.getState() } returns DeviceUpdate(staleMark, GridState(Watt(0), Volt(230u)))
         }
         val bat = battery(0)
-        val world = World(g, emptyMap(), emptyMap(), emptyMap(), mapOf("b" to bat))
+        val world = World(g, null, emptyMap(), null, bat)
         val m = manager(world)
         repeat(EnergyManager.BLIND_RELEASE_TICKS) { m.tick() }
         coVerify(exactly = 1) { bat.releaseToInverter() }
@@ -226,7 +227,7 @@ class EnergyManagerTest {
             coEvery { it.getState() } returns DeviceUpdate(freshMark, GridState(Watt(600), Volt(230u)))
         }
         val bat = battery(200)
-        val world = World(g, emptyMap(), emptyMap(), emptyMap(), mapOf("b" to bat))
+        val world = World(g, null, emptyMap(), null, bat)
         manager(world).tick()
         // Degraded tier ran on the (fresh) reading: decideDegraded(600, 200) = 200 - 600 = -400
         coVerify { bat.setChargingPower(Watt(-400)) }
@@ -236,10 +237,10 @@ class EnergyManagerTest {
         val store = FakeChargerControlStore()
         store.put("c", "FIXED", 10, true) // config() charger name is "c"
         val ch = charger(0)
-        val world = World(grid(0), mapOf("c" to ch), emptyMap(), mapOf("h" to heatpump(0)), mapOf("b" to battery(0)))
+        val world = World(grid(0), ch, emptyMap(), heatpump(0), battery(0))
         val m = EnergyManager(world, config(), SurplusPriorityStrategy(), store)
         m.loadChargerControl()
         m.tick()
-        coVerify { ch.setMaxChargerPower(Watt(10 * 230)) }
+        coVerify { ch.apply(ChargerCommand.Charge(Ampere(10))) }
     }
 }

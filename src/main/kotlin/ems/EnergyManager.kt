@@ -6,8 +6,10 @@ import io.konektis.ChargerControl
 import io.konektis.ChargerMode
 import io.konektis.ManagerMode
 import io.konektis.config.Config
+import io.konektis.devices.Ampere
 import io.konektis.devices.Watt
 import io.konektis.devices.World
+import io.konektis.devices.charger.ChargerCommand
 import io.konektis.devices.charger.ChargerConnection
 import io.konektis.devices.smartConsumers.ConsumeMode
 import io.konektis.ocpp.db.ChargerControlStore
@@ -20,14 +22,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.time.delay
-import java.time.Duration
 import java.time.Instant
 import kotlin.time.Duration.Companion.seconds
-
-enum class Mode {
-    AUTO, MANUAL
-}
 
 class EnergyManager(
     private val world: World,
@@ -37,11 +33,7 @@ class EnergyManager(
     private val carDataService: CarDataService? = null,
 ) : Klogging {
 
-    // setMode() is called from the WebSocket coroutine; tick() reads mode from the run() loop.
-    @Volatile
-    var mode = Mode.AUTO
-        private set
-    private var previousMode = Mode.AUTO
+    private var previousMode = ManagerMode.AUTO
     private var blindTicks = 0
 
     val emsStateFlow = MutableStateFlow(EMSState(null, null, null, null, null, null, null))
@@ -91,26 +83,19 @@ class EnergyManager(
         }
     }
 
-    fun setMode(newMode: Mode) {
-        mode = newMode
-        modeFlow.value = if (newMode == Mode.AUTO) ManagerMode.AUTO else ManagerMode.MANUAL
+    fun setMode(newMode: ManagerMode) {
+        modeFlow.value = newMode
     }
 
-    suspend fun run() {
-        while (true) {
-            tick()
-            delay(Duration.ofSeconds(5))
-        }
-    }
-
-    /** One control cycle. Extracted so tests can drive it without the timing loop. */
+    /** One control cycle. Called directly from the merged poll+control loop in Application. */
     suspend fun tick() {
         val emsState = buildEMSState()
         emsStateFlow.value = emsState
         _emsHistoryFlow.tryEmit(TimestampedEmsState(Instant.now(), emsState))
 
+        val mode = modeFlow.value
         // AUTO -> MANUAL transition: hand everything back to its own logic, once.
-        if (mode == Mode.MANUAL && previousMode == Mode.AUTO) {
+        if (mode == ManagerMode.MANUAL && previousMode == ManagerMode.AUTO) {
             releaseAll()
         }
         previousMode = mode
@@ -119,11 +104,11 @@ class EnergyManager(
         // empty charger; keeps the battery's deadbeat projection exact). Connected/Charging/Unknown
         // (incl. non-OCPP chargers that report Unknown) -> use the intent-driven override.
         val connected = emsState.chargerConnection != ChargerConnection.NotConnected
-        val override = configMaxAmps()?.let { effectiveChargerAmps(it, connected) }
+        val override = configMaxAmps()?.let { effectiveChargerCommand(it, connected) }
 
-        if (mode != Mode.AUTO) {
+        if (mode != ManagerMode.AUTO) {
             // MANUAL: independent charger control (battery/heat pump already released on transition).
-            applyChargerInManual(override)
+            applyChargerCommand(override ?: ChargerCommand.Stop)
             return
         }
 
@@ -133,19 +118,19 @@ class EnergyManager(
                 blindTicks++
                 if (blindTicks >= BLIND_RELEASE_TICKS) {
                     logger.warn("Blind for $blindTicks ticks (>= $BLIND_RELEASE_TICKS) — releasing battery to inverter")
-                    world.batteries.values.forEach { battery ->
+                    world.battery?.let { battery ->
                         runCatchingLog("release battery") { battery.releaseToInverter() }
                     }
                 }
                 // Stop/Fixed are still enforced without surplus data; solar surplus (null) is left as-is.
-                override?.let { applyChargerAmps(it) }
+                override?.let { applyChargerCommand(it) }
             }
             // Tier 1 — full data: run the surplus cascade with the charger override folded in.
             emsState.chargerPower != null && emsState.heatpumpPower != null -> {
                 blindTicks = 0
                 val snapshot = buildWorldSnapshot(emsState)
                 if (snapshot != null) {
-                    val decisions = strategy.decide(snapshot.copy(chargerOverrideAmps = override))
+                    val decisions = strategy.decide(snapshot.copy(chargerOverride = override))
                     logger.debug(
                         "control: grid=${emsState.gridPower}W battery=${emsState.batteryPower}W " +
                             "charger=$override -> ${decisions.batteryCommand} (target >0 = charge, <0 = discharge)"
@@ -161,20 +146,20 @@ class EnergyManager(
                     "control(degraded): grid=${emsState.gridPower}W battery=${emsState.batteryPower}W " +
                         "-> target=${target.value}W (>0 = charge, <0 = discharge)"
                 )
-                world.batteries.values.forEach { battery ->
+                world.battery?.let { battery ->
                     runCatchingLog("set battery") { battery.setChargingPower(target) }
                 }
                 // Stop/Fixed enforced; solar surplus (null) leaves the charger uncommanded.
-                override?.let { applyChargerAmps(it) }
+                override?.let { applyChargerCommand(it) }
             }
         }
     }
 
     private suspend fun releaseAll() {
-        world.batteries.values.forEach { battery ->
+        world.battery?.let { battery ->
             runCatchingLog("release battery") { battery.releaseToInverter() }
         }
-        world.smartConsumers.values.forEach { consumer ->
+        world.heatPump?.let { consumer ->
             runCatchingLog("heatpump normal") { consumer.setConsumeMode(ConsumeMode.Unrestricted) }
         }
         // TODO: charger release is best-effort. A full revert needs stopping the Webasto
@@ -189,9 +174,9 @@ class EnergyManager(
         val gridState = fresh(world.grid.getState())
         val solarStates = world.solar.values.mapNotNull { fresh(it.getState())?.power?.value }
         val solarPower = if (solarStates.isEmpty()) null else solarStates.sum()
-        val batteryState = fresh(world.batteries.values.firstOrNull()?.getState())
-        val chargerState = fresh(world.chargers.values.firstOrNull()?.getState())
-        val heatpumpState = fresh(world.smartConsumers.values.firstOrNull()?.getState())
+        val batteryState = fresh(world.battery?.getState())
+        val chargerState = fresh(world.charger?.getState())
+        val heatpumpState = fresh(world.heatPump?.getState())
 
         return EMSState(
             gridPower = gridState?.power?.value,
@@ -208,31 +193,29 @@ class EnergyManager(
 
     /** Max charger amps from config, or null if no charger is configured. */
     private fun configMaxAmps(): Int? =
-        config.devices.charger.firstOrNull()?.chargingCurrent?.max?.toInt()
+        if (world.charger != null) config.devices.charger.firstOrNull()?.chargingCurrent?.max?.toInt() else null
 
     /**
-     * Effective forced charger amps, or null to let the strategy compute the solar surplus.
-     * No car or stopped -> 0. Solar surplus only applies in AUTO; MANUAL auto-reverts to Fixed.
+     * Effective forced charger command, or null to let the strategy compute the solar surplus.
+     * No car or stopped -> Stop. Solar surplus only applies in AUTO; MANUAL auto-reverts to Fixed.
      */
-    private fun effectiveChargerAmps(maxAmps: Int, connected: Boolean): Int? {
+    private fun effectiveChargerCommand(maxAmps: Int, connected: Boolean): ChargerCommand? {
         val c = chargerControl
-        if (!connected || !c.charging) return 0
-        val chargerMode = if (mode == Mode.AUTO) c.mode else ChargerMode.FIXED
+        if (!connected || !c.charging) return ChargerCommand.Stop
+        val chargerMode = if (modeFlow.value == ManagerMode.AUTO) c.mode else ChargerMode.FIXED
         return when (chargerMode) {
-            ChargerMode.FIXED -> c.fixedAmps.coerceIn(0, maxAmps)
+            ChargerMode.FIXED -> {
+                val amps = c.fixedAmps.coerceIn(0, maxAmps)
+                if (amps == 0) ChargerCommand.Stop else ChargerCommand.Charge(Ampere(amps))
+            }
             ChargerMode.SOLAR -> null
         }
     }
 
-    private suspend fun applyChargerAmps(amps: Int) {
-        world.chargers.values.forEach { charger ->
-            runCatchingLog("set charger power") { charger.setMaxChargerPower(Watt(amps * 230)) }
+    private suspend fun applyChargerCommand(cmd: ChargerCommand) {
+        world.charger?.let { charger ->
+            runCatchingLog("set charger power") { charger.apply(cmd) }
         }
-    }
-
-    /** MANUAL: battery/heat pump are released; still drive the charger per its (Fixed) intent. */
-    private suspend fun applyChargerInManual(override: Int?) {
-        applyChargerAmps(override ?: 0)
     }
 
     private fun buildWorldSnapshot(emsState: EMSState): WorldSnapshot? {
@@ -251,17 +234,17 @@ class EnergyManager(
     }
 
     private suspend fun applyDecisions(decisions: ControlDecisions) {
-        decisions.chargerMaxAmps?.let { amps ->
-            world.chargers.values.forEach { charger ->
+        decisions.chargerCommand?.let { cmd ->
+            world.charger?.let { charger ->
                 try {
-                    charger.setMaxChargerPower(Watt(amps * 230))
+                    charger.apply(cmd)
                 } catch (e: Exception) {
-                    logger.error("Failed to set charger power", e)
+                    logger.error("Failed to apply charger command", e)
                 }
             }
         }
         decisions.batteryCommand?.let { cmd ->
-            world.batteries.values.forEach { battery ->
+            world.battery?.let { battery ->
                 try {
                     when (cmd) {
                         is BatteryCommand.SetPower -> battery.setChargingPower(cmd.power)
@@ -273,7 +256,7 @@ class EnergyManager(
             }
         }
         decisions.heatpumpConsumeMode?.let { consumeMode ->
-            world.smartConsumers.values.forEach { consumer ->
+            world.heatPump?.let { consumer ->
                 try {
                     consumer.setConsumeMode(consumeMode)
                 } catch (e: Exception) {
@@ -292,10 +275,12 @@ class EnergyManager(
     }
 
     companion object {
-        const val BLIND_RELEASE_TICKS = 6  // ~30s at 5s cadence
+        // ~30 s at nominal 5 s cadence. In the merged loop a poll timeout (10 s) stretches a tick to
+        // ~15 s, so worst-case blind release takes up to 90 s — acceptable; the SMA watchdog is ≥15 min.
+        const val BLIND_RELEASE_TICKS = 6
         /** Device readings older than this are treated as missing (a device's getState() retains the
          *  last value forever after its update() starts throwing — without this cap the blind-release
-         *  failsafe would never fire when a device drops off the network). 3 missed 5s polls. */
+         *  failsafe would never fire when a device drops off the network). 3 missed 5 s polls. */
         val STALE_AFTER = 15.seconds
     }
 }

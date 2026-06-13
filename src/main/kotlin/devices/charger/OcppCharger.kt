@@ -27,11 +27,10 @@ internal fun chargerConnectionFrom(status: ChargePointStatus?): ChargerConnectio
  * setMaxChargerPower is a logged no-op (power is then handled elsewhere, e.g. a Webasto entry).
  *
  * SetChargingProfile only *limits* a transaction — it never starts one — so a car only draws power
- * once a transaction is open. This charger therefore opens/closes the OCPP transaction to match the
- * EMS intent encoded in the commanded current: a positive setpoint means "should be charging" and a
- * zero setpoint means "should not" (the surplus strategy holds an active solar session at its minimum
- * current, never 0, so 0 A reliably means the session is off). [idTag] authorises the EMS-started
- * transaction; it must be accepted by the charge point (allow-list or acceptUnknownIdTags).
+ * once a transaction is open. This charger therefore opens/closes the OCPP transaction to match
+ * the [ChargerCommand]: [ChargerCommand.Charge] ensures a transaction is open,
+ * [ChargerCommand.Stop] stops any open transaction. [idTag] authorises the EMS-started transaction;
+ * it must be accepted by the charge point (allow-list or acceptUnknownIdTags).
  */
 class OcppCharger(
     private val chargePointId: String,
@@ -60,26 +59,26 @@ class OcppCharger(
         )
     }
 
-    override suspend fun setMaxChargerPower(power: Watt) {
-        // Send in amps (230V convention). The EMS has already clamped to the config max / fixed level.
-        val amps = power.value / 230
-
+    override suspend fun apply(cmd: ChargerCommand) {
         // Open or close the transaction to match intent BEFORE (and regardless of) SmartCharging:
         // without a transaction the car never charges, no matter what profile we set.
-        if (amps == 0) {
-            // Charging off: stopping the transaction is the off switch. A 0 A profile would just be
-            // redundant chatter on every tick (and leaves a 0 A default behind), so skip it.
-            ensureTransactionStopped()
-            return
+        when (cmd) {
+            is ChargerCommand.Stop -> {
+                // Charging off: stopping the transaction is the off switch. A 0 A profile would just be
+                // redundant chatter on every tick (and leaves a 0 A default behind), so skip it.
+                ensureTransactionStopped()
+            }
+            is ChargerCommand.Charge -> {
+                ensureTransactionStarted()
+                if (!service.isPowerControlCapable(chargePointId)) {
+                    logger.debug { "OcppCharger $chargePointId: SmartCharging unsupported, skipping setChargingProfile" }
+                    return
+                }
+                val amps = cmd.current.value
+                val ok = service.setChargingProfile(chargePointId, connectorId, amps.toDouble(), ChargingRateUnitType.A)
+                if (!ok) logger.warn { "OcppCharger $chargePointId: SetChargingProfile($amps A) not accepted" }
+            }
         }
-        ensureTransactionStarted()
-
-        if (!service.isPowerControlCapable(chargePointId)) {
-            logger.debug { "OcppCharger $chargePointId: SmartCharging unsupported, skipping setChargingProfile" }
-            return
-        }
-        val ok = service.setChargingProfile(chargePointId, connectorId, amps.toDouble(), ChargingRateUnitType.A)
-        if (!ok) logger.warn { "OcppCharger $chargePointId: SetChargingProfile($amps A) not accepted" }
     }
 
     /** Start a transaction when a car is plugged in but none is open yet. Idempotent across ticks. */

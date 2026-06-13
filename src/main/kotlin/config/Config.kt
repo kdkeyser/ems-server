@@ -23,13 +23,7 @@ enum class GridMeterType {
 }
 
 @Serializable
-enum class GridType {
-    Phase1,
-    Phase3_230V,
-    Phase3_400V
-}
-@Serializable
-data class Grid(val type: GridMeterType, val gridType: GridType, val host: String)
+data class Grid(val type: GridMeterType, val host: String)
 
 @Serializable
 enum class HeatPumpType {
@@ -111,20 +105,9 @@ data class Config(
     val refreshThreads : Int = 50
 )
 
-/**
- * Human-readable misconfiguration warnings, logged once at startup. Multi-device lists are
- * accepted by the schema but the EnergyManager only reads the FIRST charger/battery/heat pump
- * for state and control keys (commands fan out to all) — warn instead of silently half-working.
- */
 fun Config.startupWarnings(): List<String> = buildList {
     if (websocket.password == "password")
         add("Default WebSocket password in use — set websocket.password in config.yaml")
-    if (devices.charger.size > 1)
-        add("Multiple chargers configured; only '${devices.charger.first().name}' drives EMS control")
-    if (devices.battery.size > 1)
-        add("Multiple batteries configured; only '${devices.battery.first().name}' is read into EMSState")
-    if (devices.heatPump.size > 1)
-        add("Multiple heat pumps configured; only '${devices.heatPump.first().name}' is read into EMSState")
 }
 
 /**

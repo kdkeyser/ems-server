@@ -1,6 +1,8 @@
 package io.konektis.ems
 
+import io.konektis.devices.Ampere
 import io.konektis.devices.Watt
+import io.konektis.devices.charger.ChargerCommand
 import io.konektis.devices.smartConsumers.ConsumeMode
 import kotlin.math.abs
 import kotlin.math.max
@@ -49,8 +51,11 @@ class SurplusPriorityStrategy(
         // During an active solar session (override == null) never drop below the minimum — a car won't
         // charge below it, so dropping to 0 just chatters the relays. The shortfall is imported (the
         // battery, balancing the measured grid, covers it first).
-        val chargerAmps = snapshot.chargerOverrideAmps?.coerceIn(0, snapshot.chargerMaxAmps)
-            ?: (available / 230).coerceIn(snapshot.chargerMinAmps, snapshot.chargerMaxAmps)
+        val chargerCommand: ChargerCommand = snapshot.chargerOverride
+            ?: run {
+                val amps = (available / 230).coerceIn(snapshot.chargerMinAmps, snapshot.chargerMaxAmps)
+                ChargerCommand.Charge(Ampere(amps))
+            }
         // Battery balances the MEASURED grid, not the charger setpoint: the charger's real draw —
         // whatever the car actually takes — already shows up in gridPower. Feeding the commanded
         // setpoint forward instead parked the grid in steady-state export whenever the car drew less
@@ -58,7 +63,7 @@ class SurplusPriorityStrategy(
         val batteryTarget = batteryTarget(snapshot.batteryPower.value, snapshot.gridPower.value)
 
         return ControlDecisions(
-            chargerMaxAmps = chargerAmps,
+            chargerCommand = chargerCommand,
             batteryCommand = BatteryCommand.SetPower(batteryTarget),
             heatpumpConsumeMode = heatpumpMode
         )

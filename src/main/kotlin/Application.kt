@@ -47,7 +47,7 @@ class Main : Klogging {
         val config = loadConfig("/config.yaml")
 
         logger.info("EMS server starting")
-        logger.info("Grid: ${config.grid.type} @ ${config.grid.host} (${config.grid.gridType})")
+        logger.info("Grid: ${config.grid.type} @ ${config.grid.host}")
         if (config.devices.solar.isNotEmpty())
             logger.info("Solar: ${config.devices.solar.joinToString { "${it.name} @ ${it.host}" }}")
         if (config.devices.charger.isNotEmpty())
@@ -71,7 +71,7 @@ class Main : Klogging {
         Runtime.getRuntime().addShutdownHook(Thread {
             runBlocking {
                 withTimeoutOrNull(3_000) {
-                    component.world.batteries.values.forEach {
+                    component.world.battery?.let {
                         runCatching { it.releaseToInverter() }
                     }
                 }
@@ -79,14 +79,14 @@ class Main : Klogging {
         })
 
         coroutineScope {
+            energyManager.loadChargerControl()
             launch {
                 while (true) {
                     dataCollector.refresh()
-                    delay(5000)
+                    energyManager.tick()
+                    delay(5_000)
                 }
             }
-            energyManager.loadChargerControl()
-            launch { energyManager.run() }
             launch { component.carDataService.start() }
             launch { component.historyWriter.run(energyManager.emsHistoryFlow) }
             launch {
@@ -117,6 +117,4 @@ fun Application.module(
     configureOcppWebUi(ocppService, energyManager)
     configureHistoryAuthenticated(clickhouse, historyRepository)
     configureMonitoring()
-    configureHTTP()
-    configureRouting()
 }

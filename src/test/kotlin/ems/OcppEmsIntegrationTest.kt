@@ -46,10 +46,10 @@ class OcppEmsIntegrationTest {
 
         val world = World(
             grid = grid,
-            chargers = mapOf("ocpp" to charger),
+            charger = charger,
             solar = emptyMap(),
-            smartConsumers = mapOf("hp" to heatpump),
-            batteries = mapOf("bat" to battery),
+            heatPump = heatpump,
+            battery = battery,
         )
         // config.yaml's first charger entry bounds amps to [6, 32].
         val manager = EnergyManager(world, loadConfig("/config.yaml"), SurplusPriorityStrategy(), FakeChargerControlStore())

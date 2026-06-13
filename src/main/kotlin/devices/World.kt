@@ -14,7 +14,6 @@ import io.konektis.devices.charger.Charger
 import io.konektis.devices.charger.OcppCharger
 import io.konektis.devices.charger.Webasto
 import io.konektis.devices.grid.Grid
-import io.konektis.devices.grid.GridProperties
 import io.konektis.devices.grid.P1Meter
 import io.konektis.devices.smartConsumers.SmartConsumer
 import io.konektis.devices.solar.Solar
@@ -22,21 +21,29 @@ import io.konektis.ocpp.OcppService
 
 data class World(
     val grid: Grid,
-    val chargers : Map<String, Charger>,
-    val solar : Map<String, Solar>,
-    val smartConsumers : Map<String, SmartConsumer>,
-    val batteries : Map<String, Battery>
-    )
-{
+    val charger: Charger?,
+    val solar: Map<String, Solar>,
+    val heatPump: SmartConsumer?,
+    val battery: Battery?,
+) {
     companion object {
         fun fromConfig(config: Config, ocppService: OcppService): World {
-            val grid = when (config.grid.type) {
-                GridMeterType.P1HomeWizard -> P1Meter(config.grid.host, GridProperties(config.grid.gridType))
+            require(config.devices.charger.size <= 1) {
+                "Only one charger is supported; got ${config.devices.charger.map { it.name }}"
             }
-            val chargers = config.devices.charger.associate {
+            require(config.devices.battery.size <= 1) {
+                "Only one battery is supported; got ${config.devices.battery.map { it.name }}"
+            }
+            require(config.devices.heatPump.size <= 1) {
+                "Only one heat pump is supported; got ${config.devices.heatPump.map { it.name }}"
+            }
+            val grid = when (config.grid.type) {
+                GridMeterType.P1HomeWizard -> P1Meter(config.grid.host)
+            }
+            val charger = config.devices.charger.firstOrNull()?.let {
                 when (it.type) {
-                    ChargerType.WebastoUnite -> Pair(it.name, Webasto(it.host!!))
-                    ChargerType.OCPP -> Pair(it.name, OcppCharger(it.chargePointId!!, it.connectorId, ocppService))
+                    ChargerType.WebastoUnite -> Webasto(it.host!!)
+                    ChargerType.OCPP -> OcppCharger(it.chargePointId!!, it.connectorId, ocppService)
                 }
             }
             val solar = config.devices.solar.associate {
@@ -44,23 +51,17 @@ data class World(
                     SolarType.SMA_Sunny_Boy -> Pair(it.name, SMASolar(it.host))
                 }
             }
-            val smartConsumers = config.devices.heatPump.associate {
+            val heatPump = config.devices.heatPump.firstOrNull()?.let {
                 when (it.type) {
-                    HeatPumpType.DaikinHomeHub -> Pair(it.name, DaikinHeatpump(it.host))
+                    HeatPumpType.DaikinHomeHub -> DaikinHeatpump(it.host)
                 }
             }
-            val batteries = config.devices.battery.associate {
+            val battery = config.devices.battery.firstOrNull()?.let {
                 when (it.type) {
-                    BatteryType.SMA_Sunny_Boy_Storage -> Pair(it.name, SMABattery(it.host))
+                    BatteryType.SMA_Sunny_Boy_Storage -> SMABattery(it.host)
                 }
             }
-            return World(
-                grid,
-                chargers,
-                solar,
-                smartConsumers,
-                batteries
-            )
+            return World(grid, charger, solar, heatPump, battery)
         }
     }
 }

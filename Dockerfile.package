@@ -1,0 +1,24 @@
+# Single-stage runtime image that packages a PREBUILT fat jar.
+#
+# Expects ems-server.jar in the build context — produced on the host by `./gradlew shadowJar`
+# (driven by deploy/build-podman.sh). This trades in-container build hermeticity for speed: the
+# host's warm Gradle cache + daemon + incremental compile build the jar in seconds, versus a cold
+# clean build of minutes inside Docker. For a fully self-contained in-container build instead, use
+# the multi-stage ./Dockerfile (deploy/build-podman.sh --in-container).
+FROM docker.io/library/eclipse-temurin:21-jre AS runtime
+WORKDIR /app
+
+# Run as a non-root user. Pre-create + own /data and /config so that a freshly-created
+# (empty) named volume mounted at /data inherits ems ownership and SQLite can write ems.db.
+RUN useradd --system --uid 10001 --create-home ems \
+    && mkdir -p /data /config \
+    && chown -R ems:ems /data /config
+USER ems
+
+COPY ems-server.jar /app/ems-server.jar
+
+# Config is mounted at /config/config.yaml; SQLite DB lives under /data.
+ENV EMS_CONFIG=/config/config.yaml
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "/app/ems-server.jar"]

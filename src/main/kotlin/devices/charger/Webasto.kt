@@ -80,9 +80,12 @@ class Webasto(val host: String) : Klogging, Charger {
         }
     }
 
-    override suspend fun setMaxChargerPower(power: Watt) {
+    override suspend fun apply(cmd: ChargerCommand) {
         mutex.withLock {
-            setMaxCurrent(power.value/230)
+            when (cmd) {
+                is ChargerCommand.Stop -> setMaxCurrent(0)
+                is ChargerCommand.Charge -> setMaxCurrent(cmd.current.value)
+            }
         }
     }
 }

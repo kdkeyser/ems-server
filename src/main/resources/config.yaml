@@ -15,7 +15,6 @@ websocket:
 
 grid:
   type: P1HomeWizard
-  gridType: Phase3_230V
   host: 192.168.129.17
 
 devices:

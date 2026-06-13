@@ -52,7 +52,7 @@ class SimpleGridCompensationStrategyTest {
     @Test
     fun `it never touches the charger or the heat pump`() {
         val d = strategy.decide(snapshot(gridPower = 1000, batteryPower = 0))
-        assertNull(d.chargerMaxAmps)
+        assertNull(d.chargerCommand)
         assertNull(d.heatpumpConsumeMode)
     }
 

@@ -27,7 +27,7 @@ class SimpleGridCompensationStrategy(
 
     override fun decide(snapshot: WorldSnapshot): ControlDecisions =
         ControlDecisions(
-            chargerMaxAmps = null,        // leave the charger alone
+            chargerCommand = null,        // leave the charger alone
             batteryCommand = BatteryCommand.SetPower(compensate(snapshot.batteryPower, snapshot.gridPower)),
             heatpumpConsumeMode = null,   // leave the heat pump alone
         )

@@ -14,8 +14,14 @@
 # The clickhouse and grafana images are NOT bundled — `docker compose up` pulls them on the NAS
 # (which already needs outbound internet for the Grafana plugin and cloudflared:latest).
 #
+# Speed: by default the fat jar is built ON THE HOST (`./gradlew shadowJar` — warm Gradle cache,
+# daemon, incremental compile: seconds) and packaged into a slim single-stage image. Pass
+# --in-container to do a fully self-contained clean build inside Docker instead (the old behaviour;
+# minutes, but needs no host JDK).
+#
 # Usage:
-#   deploy/build-podman.sh                         # build + bundle -> ems-deploy.zip
+#   deploy/build-podman.sh                         # host-build the jar + bundle -> ems-deploy.zip
+#   deploy/build-podman.sh --in-container          # build the jar inside Docker (slow, hermetic)
 #   deploy/build-podman.sh --tag v1.2.3            # tag the ems-server image
 #   deploy/build-podman.sh --output /tmp/x.zip     # write the zip elsewhere
 #
@@ -36,11 +42,16 @@ set -euo pipefail
 IMAGE="localhost/ems-server"
 TAG="latest"
 CLOUDFLARED_IMAGE="docker.io/cloudflare/cloudflared:latest"
-OUTPUT=""   # resolved to <repo>/ems-deploy.zip after we know the repo root
+OUTPUT=""        # resolved to <repo>/ems-deploy.zip after we know the repo root
+IN_CONTAINER=false
 
 # --- parse args ---
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --in-container)
+            IN_CONTAINER=true
+            shift
+            ;;
         --tag)
             TAG="${2:?--tag needs a value}"
             shift 2
@@ -50,7 +61,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -h|--help)
-            sed -n '2,28p' "$0"
+            sed -n '2,34p' "$0"
             exit 0
             ;;
         *)
@@ -66,6 +77,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 OUTPUT="${OUTPUT:-$REPO_ROOT/ems-deploy.zip}"
 
+# podman + zip are always needed; the host build path also needs the Gradle wrapper.
 for tool in podman zip; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         echo "ERROR: $tool is not installed or not on PATH." >&2
@@ -73,28 +85,56 @@ for tool in podman zip; do
     fi
 done
 
-if [[ ! -f "$REPO_ROOT/Dockerfile" ]]; then
-    echo "ERROR: Dockerfile not found at $REPO_ROOT/Dockerfile" >&2
-    exit 1
-fi
 if [[ ! -f "$REPO_ROOT/docker-compose.yml" ]]; then
     echo "ERROR: docker-compose.yml not found at $REPO_ROOT/docker-compose.yml" >&2
     exit 1
 fi
 
-echo "==> Building $IMAGE:$TAG from $REPO_ROOT/Dockerfile"
-podman build -t "$IMAGE:$TAG" -f "$REPO_ROOT/Dockerfile" "$REPO_ROOT"
+# Single cleanup hook for every temp dir we create below (bash keeps only one EXIT trap).
+STAGE=""
+PKGCTX=""
+cleanup() { [[ -n "$STAGE" ]] && rm -rf "$STAGE"; [[ -n "$PKGCTX" ]] && rm -rf "$PKGCTX"; }
+trap cleanup EXIT
+
+if [[ "$IN_CONTAINER" == "true" ]]; then
+    # Fully self-contained clean build inside Docker (the multi-stage Dockerfile). No host JDK
+    # needed, but no warm cache/daemon either, so it re-downloads deps and clean-compiles: minutes.
+    [[ -f "$REPO_ROOT/Dockerfile" ]] || { echo "ERROR: Dockerfile not found at $REPO_ROOT/Dockerfile" >&2; exit 1; }
+    echo "==> Building $IMAGE:$TAG in-container (multi-stage) from $REPO_ROOT/Dockerfile"
+    podman build -t "$IMAGE:$TAG" -f "$REPO_ROOT/Dockerfile" "$REPO_ROOT"
+else
+    # Host build: reuse the warm Gradle cache + daemon + incremental compile (seconds), then drop
+    # the prebuilt jar into a slim single-stage image.
+    [[ -f "$REPO_ROOT/Dockerfile.package" ]] || { echo "ERROR: Dockerfile.package not found at $REPO_ROOT/Dockerfile.package" >&2; exit 1; }
+    [[ -x "$REPO_ROOT/gradlew" ]] || { echo "ERROR: $REPO_ROOT/gradlew not found or not executable" >&2; exit 1; }
+
+    echo "==> Building the fat jar on the host: ./gradlew shadowJar"
+    ( cd "$REPO_ROOT" && ./gradlew shadowJar )
+
+    JAR="$REPO_ROOT/build/libs/ems-server-all.jar"
+    [[ -f "$JAR" ]] || { echo "ERROR: expected fat jar not found at $JAR after shadowJar" >&2; exit 1; }
+
+    echo "==> Packaging $IMAGE:$TAG from the prebuilt jar (slim single-stage image)"
+    # Build from a tiny dedicated context (just the jar + Dockerfile) so the image build is a fast
+    # COPY, and so .dockerignore's `build/` exclusion doesn't hide the jar from the build context.
+    PKGCTX="$(mktemp -d)"
+    cp "$JAR" "$PKGCTX/ems-server.jar"
+    cp "$REPO_ROOT/Dockerfile.package" "$PKGCTX/Dockerfile"
+    podman build -t "$IMAGE:$TAG" "$PKGCTX"
+    rm -rf "$PKGCTX"; PKGCTX=""
+fi
 
 echo "==> Pulling $CLOUDFLARED_IMAGE"
 podman pull "$CLOUDFLARED_IMAGE"
 
 # --- assemble the deployment bundle in a staging dir ---
 STAGE="$(mktemp -d)"
-trap 'rm -rf "$STAGE"' EXIT
 
 echo "==> Saving images -> ems-images.tar.gz"
-# -m / --multi-image-archive: several images in one docker-archive (docker-loadable).
-podman save -m "$IMAGE:$TAG" "$CLOUDFLARED_IMAGE" | gzip > "$STAGE/ems-images.tar.gz"
+# -m / --multi-image-archive: several images in one docker-archive (docker-loadable). gzip -1: the
+# image layers are largely incompressible already, so the fastest level gives near-identical size
+# for far less CPU. Kept as gzip (not zstd) so the NAS's old `docker load` can decompress it.
+podman save -m "$IMAGE:$TAG" "$CLOUDFLARED_IMAGE" | gzip -1 > "$STAGE/ems-images.tar.gz"
 
 echo "==> Collecting compose + mounted config"
 cp "$REPO_ROOT/docker-compose.yml" "$STAGE/"

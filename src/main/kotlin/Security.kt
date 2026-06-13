@@ -7,7 +7,7 @@ import io.konektis.config.WebSocketConfig
 fun Application.configureSecurity(wsConfig: WebSocketConfig) {
     authentication {
         basic(name = "auth-basic") {
-            realm = "Access to the '/' path"
+            realm = "EMS"
             validate { credentials ->
                 if (credentials.name == wsConfig.username && credentials.password == wsConfig.password) {
                     UserIdPrincipal(credentials.name)

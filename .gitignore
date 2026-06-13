@@ -36,6 +36,7 @@ out/
 .vscode/
 .superpowers/
 .claude/
+.claire/
 
 ### Android / local ###
 local.properties

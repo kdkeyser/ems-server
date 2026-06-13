@@ -18,7 +18,7 @@ class SocketsAuthTest {
     private fun ApplicationTestBuilder.installSockets() {
         application {
             val em = EnergyManager(
-                World(mockk(relaxed = true), emptyMap(), emptyMap(), emptyMap(), emptyMap()),
+                World(mockk(relaxed = true), null, emptyMap(), null, null),
                 mockk(relaxed = true), SurplusPriorityStrategy(), FakeChargerControlStore(),
             )
             configureSockets(em, WebSocketConfig("user", "pw"))

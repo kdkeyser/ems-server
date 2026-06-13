@@ -1,5 +1,6 @@
 package io.konektis.devices.charger
 
+import io.konektis.devices.Ampere
 import io.konektis.devices.Watt
 import io.konektis.ocpp.ChargePointStatus
 import io.konektis.ocpp.ChargingRateUnitType
@@ -91,7 +92,7 @@ class OcppChargerTest {
         coEvery { svc.setChargingProfile("CP1", 1, any(), any()) } returns true
         val charger = OcppCharger("CP1", 1, svc)
 
-        charger.setMaxChargerPower(Watt(3680)) // 16A * 230V
+        charger.apply(ChargerCommand.Charge(Ampere(16)))
 
         coVerify { svc.setChargingProfile("CP1", 1, 16.0, ChargingRateUnitType.A) }
     }
@@ -103,13 +104,13 @@ class OcppChargerTest {
         every { svc.isPowerControlCapable("CP1") } returns false
         val charger = OcppCharger("CP1", 1, svc)
 
-        charger.setMaxChargerPower(Watt(3680))
+        charger.apply(ChargerCommand.Charge(Ampere(16)))
 
         coVerify(exactly = 0) { svc.setChargingProfile(any(), any(), any(), any()) }
     }
 
     @Test
-    fun `positive power starts a transaction when a car is connected but none is open`() = runTest {
+    fun `positive amps starts a transaction when a car is connected but none is open`() = runTest {
         val svc = mockk<OcppService>()
         every { svc.activeTransactionId("CP1", 1) } returns null
         every { svc.connectorStatus("CP1", 1) } returns ChargePointStatus.Preparing
@@ -118,26 +119,26 @@ class OcppChargerTest {
         coEvery { svc.setChargingProfile("CP1", 1, any(), any()) } returns true
         val charger = OcppCharger("CP1", 1, svc)
 
-        charger.setMaxChargerPower(Watt(3680))
+        charger.apply(ChargerCommand.Charge(Ampere(16)))
 
         coVerify { svc.remoteStart("CP1", "EMS", 1) }
     }
 
     @Test
-    fun `positive power does not start a transaction when one is already active`() = runTest {
+    fun `positive amps does not start a transaction when one is already active`() = runTest {
         val svc = mockk<OcppService>()
         every { svc.activeTransactionId("CP1", 1) } returns 42
         every { svc.isPowerControlCapable("CP1") } returns true
         coEvery { svc.setChargingProfile("CP1", 1, any(), any()) } returns true
         val charger = OcppCharger("CP1", 1, svc)
 
-        charger.setMaxChargerPower(Watt(3680))
+        charger.apply(ChargerCommand.Charge(Ampere(16)))
 
         coVerify(exactly = 0) { svc.remoteStart(any(), any(), any()) }
     }
 
     @Test
-    fun `positive power does not start a transaction when no car is connected`() = runTest {
+    fun `positive amps does not start a transaction when no car is connected`() = runTest {
         val svc = mockk<OcppService>()
         every { svc.activeTransactionId("CP1", 1) } returns null
         every { svc.connectorStatus("CP1", 1) } returns ChargePointStatus.Available
@@ -145,19 +146,19 @@ class OcppChargerTest {
         coEvery { svc.setChargingProfile("CP1", 1, any(), any()) } returns true
         val charger = OcppCharger("CP1", 1, svc)
 
-        charger.setMaxChargerPower(Watt(3680))
+        charger.apply(ChargerCommand.Charge(Ampere(16)))
 
         coVerify(exactly = 0) { svc.remoteStart(any(), any(), any()) }
     }
 
     @Test
-    fun `zero power stops the active transaction and sends no profile`() = runTest {
+    fun `Stop stops the active transaction and sends no profile`() = runTest {
         val svc = mockk<OcppService>()
         every { svc.activeTransactionId("CP1", 1) } returns 42
         coEvery { svc.remoteStop("CP1", 42) } returns true
         val charger = OcppCharger("CP1", 1, svc)
 
-        charger.setMaxChargerPower(Watt(0))
+        charger.apply(ChargerCommand.Stop)
 
         coVerify { svc.remoteStop("CP1", 42) }
         // Stopping the transaction is the off switch; no redundant 0 A profile.
@@ -165,12 +166,12 @@ class OcppChargerTest {
     }
 
     @Test
-    fun `zero power is a no-op when no transaction is open`() = runTest {
+    fun `Stop is a no-op when no transaction is open`() = runTest {
         val svc = mockk<OcppService>()
         every { svc.activeTransactionId("CP1", 1) } returns null
         val charger = OcppCharger("CP1", 1, svc)
 
-        charger.setMaxChargerPower(Watt(0))
+        charger.apply(ChargerCommand.Stop)
 
         coVerify(exactly = 0) { svc.remoteStop(any(), any()) }
         coVerify(exactly = 0) { svc.setChargingProfile(any(), any(), any(), any()) }

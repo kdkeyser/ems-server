@@ -1,6 +1,7 @@
 package io.konektis.ems
 
 import io.konektis.devices.Watt
+import io.konektis.devices.charger.ChargerCommand
 import io.konektis.devices.smartConsumers.ConsumeMode
 
 data class WorldSnapshot(
@@ -12,11 +13,11 @@ data class WorldSnapshot(
     val heatpumpPower: Watt,
     val chargerMinAmps: Int,      // from config: minimum amps before charger stops
     val chargerMaxAmps: Int,      // from config: maximum amps
-    val chargerOverrideAmps: Int? = null  // non-null = forced charger amps (Stop=0 / Fixed); null = compute from surplus
+    val chargerOverride: ChargerCommand? = null  // non-null = forced command (Stop / Fixed); null = compute from surplus
 )
 
 data class ControlDecisions(
-    val chargerMaxAmps: Int?,             // null = no change
+    val chargerCommand: ChargerCommand?,  // null = no change
     val batteryCommand: BatteryCommand?,  // null = no change
     val heatpumpConsumeMode: ConsumeMode? // null = no change
 )

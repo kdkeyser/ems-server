@@ -65,9 +65,7 @@ private class P1MeterClient(private val host: String) {
     }
 }
 
-class P1Meter(host: String,
-              override val properties: GridProperties
-) : Klogging, Grid {
+class P1Meter(host: String) : Klogging, Grid {
     private val p1MeterClient = P1MeterClient(host)
     private var internalState: DeviceUpdate<GridState>? = null
     val mutex = Mutex()

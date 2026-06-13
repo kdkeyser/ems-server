@@ -108,9 +108,7 @@ fun Application.configureSockets(energyManager: EnergyManager, wsConfig: WebSock
                                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Authentication required"))
                                 } else {
                                     // The modeJob collector echoes the resulting ModeUpdate; no explicit send here.
-                                    energyManager.setMode(
-                                        if (message.mode == ManagerMode.AUTO) io.konektis.ems.Mode.AUTO else io.konektis.ems.Mode.MANUAL
-                                    )
+                                    energyManager.setMode(message.mode)
                                 }
                             }
                             is ClientMessage.SetCharging -> {

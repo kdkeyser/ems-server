@@ -28,9 +28,9 @@ import kotlinx.coroutines.test.runTest
 
 private fun makeWorld(
     solar: Map<String, Solar> = emptyMap(),
-    chargers: Map<String, Charger> = emptyMap(),
-    batteries: Map<String, Battery> = emptyMap(),
-    smartConsumers: Map<String, SmartConsumer> = emptyMap(),
+    charger: Charger? = null,
+    battery: Battery? = null,
+    heatPump: SmartConsumer? = null,
     grid: Grid = mockk<Grid>().also {
         coEvery { it.update() } just runs
         coEvery { it.getState() } returns DeviceUpdate(
@@ -38,7 +38,7 @@ private fun makeWorld(
             GridState(Watt(0), Volt(230u))
         )
     }
-): World = World(grid, chargers, solar, smartConsumers, batteries)
+): World = World(grid, charger, solar, heatPump, battery)
 
 class DataCollectorHealthTest {
 
@@ -149,7 +149,7 @@ class DataCollectorHealthTest {
             ChargerState(Watt(0), ChargerConnection.Connected)
         )
 
-        val collector = DataCollector(1, makeWorld(chargers = mapOf("Webasto" to charger)))
+        val collector = DataCollector(1, makeWorld(charger = charger))
         collector.refresh()
 
         assertEquals("Connected", collector.statusStateFlow.value!!.chargerConnection)
@@ -161,7 +161,7 @@ class DataCollectorHealthTest {
         coEvery { charger.update() } throws Exception("timeout")
         coEvery { charger.getState() } returns null
 
-        val collector = DataCollector(1, makeWorld(chargers = mapOf("Webasto" to charger)))
+        val collector = DataCollector(1, makeWorld(charger = charger))
         collector.refresh()
 
         assertNull(collector.statusStateFlow.value!!.chargerConnection)

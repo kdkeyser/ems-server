@@ -16,20 +16,22 @@
     .pill { font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; background: #374151; }
     .pill.db { background: #065f46; color: #d1fae5; }
     .pill.file { background: #374151; color: #d1d5db; }
-    label { font-size: 0.8rem; color: #9ca3af; display: block; margin: 6px 0 2px; }
+    label { font-size: 0.75rem; color: #9ca3af; display: block; margin: 8px 0 2px; }
     button { background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 0.8rem; }
     button.secondary { background: #374151; }
     button.danger { background: #7c2d12; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     input, select, textarea { background: #111827; border: 1px solid #374151; color: #e5e7eb; border-radius: 6px; padding: 5px 8px; font-size: 0.8rem; width: 100%; }
     textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; min-height: 220px; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-    td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #374151; }
+    fieldset { border: 1px solid #374151; border-radius: 8px; padding: 6px 10px 10px; margin-top: 8px; }
+    legend { font-size: 0.75rem; color: #9ca3af; padding: 0 4px; }
     .banner { padding: 8px 12px; border-radius: 6px; margin: 10px 0; display: none; }
     .banner.ro { background: #78350f; color: #fde68a; display: block; }
     .banner.err { background: #7f1d1d; color: #fecaca; }
     .banner.ok { background: #065f46; color: #d1fae5; }
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+    .dev { border-top: 1px solid #374151; padding-top: 8px; margin-top: 10px; }
+    .dev:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
   </style>
 </head>
 <body>
@@ -43,13 +45,7 @@
   <div id="msg" class="banner"></div>
 
   <h2>Grid meter</h2>
-  <div class="card">
-    <div class="grid2">
-      <div><label>Type</label><input id="gridType" disabled></div>
-      <div><label>Host</label><input id="gridHost"></div>
-    </div>
-    <div class="row" style="margin-top:10px"><span></span><button id="saveGrid" onclick="saveGrid()">Save grid</button></div>
-  </div>
+  <div id="grid"></div>
 
   <h2>Settings</h2>
   <div class="card">
@@ -72,19 +68,6 @@
   <h2>Devices</h2>
   <div id="devices"></div>
 
-  <h2>Add device</h2>
-  <div class="card">
-    <label>Kind</label>
-    <select id="addKind">
-      <option value="solar">solar</option><option value="charger">charger</option>
-      <option value="battery">battery</option><option value="heatPump">heatPump</option>
-      <option value="car">car</option>
-    </select>
-    <label style="margin-top:8px">Device JSON</label>
-    <textarea id="addJson" style="min-height:90px" placeholder='{"type":"SMA_Sunny_Boy","name":"Roof","host":"192.168.1.20"}'></textarea>
-    <div class="row" style="margin-top:8px"><span></span><button id="addDevice" onclick="addDevice()">Add device</button></div>
-  </div>
-
   <h2>Full config (raw)</h2>
   <div class="card">
     <textarea id="raw"></textarea>
@@ -93,125 +76,193 @@
   </div>
 
 <script>
-const KINDS = ["solar", "charger", "battery", "heatPump", "car"];
-let state = null;       // last ConfigResponse
+let state = null;     // last ConfigResponse {source, version, config}
+let schema = null;    // {grid, deviceKinds}
 let readOnly = false;
 
+// ---- messaging --------------------------------------------------------------
 function msg(text, kind) {
   const el = document.getElementById("msg");
-  el.className = "banner " + kind;
-  el.style.display = "block";
-  el.textContent = text;
+  el.className = "banner " + kind; el.style.display = "block"; el.textContent = text;
 }
-function clearMsg() { const el = document.getElementById("msg"); el.style.display = "none"; }
+function clearMsg() { document.getElementById("msg").style.display = "none"; }
 
-function setReadOnly(ro) {
-  readOnly = ro;
-  document.getElementById("roBanner").style.display = ro ? "block" : "none";
-  document.querySelectorAll("button").forEach(b => {
-    if (b.id && b.id !== "") b.disabled = ro && b.getAttribute("onclick") !== "load()";
-  });
+// ---- generic schema-driven form rendering -----------------------------------
+function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); }
+
+// Render the inputs for a list of FieldSchema, prefilled from `obj`. Inputs get an id of
+// `${formId}::${dotted.path}` so values can be collected back generically.
+function renderFields(fields, obj, formId, prefix = "") {
+  return fields.map(f => {
+    const path = prefix ? prefix + "." + f.name : f.name;
+    const id = formId + "::" + path;
+    const val = obj ? obj[f.name] : undefined;
+    const label = `<label>${f.name}${f.required ? " *" : ""}</label>`;
+    if (f.type === "object") {
+      return `<fieldset><legend>${f.name}${f.required ? " *" : ""}</legend>
+        ${renderFields(f.fields, val || {}, formId, path)}</fieldset>`;
+    }
+    return label + inputFor(f, val, id);
+  }).join("");
 }
 
+function inputFor(f, value, id) {
+  if (f.type === "boolean") {
+    const opt = (b) => `<option value="${b}" ${String(value) === String(b) ? "selected" : ""}>${b}</option>`;
+    return `<select id="${id}">${opt(false)}${opt(true)}</select>`;
+  }
+  if (f.type === "enum") {
+    return `<select id="${id}">` +
+      f.enumValues.map(o => `<option ${o === value ? "selected" : ""}>${esc(o)}</option>`).join("") + `</select>`;
+  }
+  const step = f.type === "double" ? "any" : (f.type === "int" || f.type === "long") ? "1" : null;
+  const numeric = step !== null;
+  const v = value === undefined || value === null ? "" : esc(value);
+  return `<input id="${id}" ${numeric ? `type="number" step="${step}"` : `type="text"`} value="${v}">`;
+}
+
+// Collect a value object back from the rendered inputs. Empty optional fields are omitted so the
+// server's defaults apply; empty required strings are sent so server validation can flag them.
+function collectFields(fields, formId, prefix = "") {
+  const out = {};
+  for (const f of fields) {
+    const path = prefix ? prefix + "." + f.name : f.name;
+    if (f.type === "object") { out[f.name] = collectFields(f.fields, formId, path); continue; }
+    const el = document.getElementById(formId + "::" + path);
+    const raw = el.value;
+    if (f.type === "boolean") { out[f.name] = raw === "true"; continue; }
+    if (raw === "") {
+      if (f.required && (f.type === "string")) out[f.name] = "";
+      continue; // optional empty -> omit; required numeric empty -> omit (server reports missing)
+    }
+    if (f.type === "int" || f.type === "long") out[f.name] = parseInt(raw, 10);
+    else if (f.type === "double") out[f.name] = parseFloat(raw);
+    else out[f.name] = raw; // string or enum
+  }
+  return out;
+}
+
+// ---- API --------------------------------------------------------------------
 async function api(method, path, body) {
   const opts = { method, headers: {} };
   if (body !== undefined) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
   const res = await fetch(path, opts);
-  if (res.status === 409) { msg("Read-only: config is file-sourced.", "err"); throw new Error("read-only"); }
+  if (res.status === 409) { msg("Read-only: config is file-sourced.", "err"); throw new Error("ro"); }
   if (res.status === 422) {
     const errs = await res.json();
     msg("Validation failed: " + errs.map(e => e.field + " — " + e.message).join("; "), "err");
     throw new Error("invalid");
   }
   if (!res.ok) { msg("Request failed: " + res.status, "err"); throw new Error("http " + res.status); }
-  return res.status === 200 && res.headers.get("content-type")?.includes("json") ? res.json() : null;
+  return res.headers.get("content-type")?.includes("json") ? res.json() : null;
 }
 
 async function load() {
   clearMsg();
-  const res = await fetch("/api/config");
-  if (!res.ok) { msg("Could not load config: " + res.status, "err"); return; }
-  state = await res.json();
+  const [cfgRes, schRes] = await Promise.all([fetch("/api/config"), fetch("/api/config/schema")]);
+  if (!cfgRes.ok) { msg("Could not load config: " + cfgRes.status, "err"); return; }
+  state = await cfgRes.json();
+  schema = await schRes.json();
   render();
 }
 
+// ---- render -----------------------------------------------------------------
 function render() {
   const cfg = state.config;
   document.getElementById("source").textContent = state.source;
   document.getElementById("source").className = "pill " + (state.source === "database" ? "db" : "file");
   document.getElementById("version").textContent = state.version;
-  setReadOnly(state.source !== "database");
+  readOnly = state.source !== "database";
+  document.getElementById("roBanner").style.display = readOnly ? "block" : "none";
 
-  document.getElementById("gridType").value = cfg.grid.type;
-  document.getElementById("gridHost").value = cfg.grid.host;
+  // Settings (kept as a fixed form).
   document.getElementById("strategy").value = cfg.strategy;
   document.getElementById("pollIntervalMs").value = cfg.pollIntervalMs;
   document.getElementById("ocppAcceptCp").value = String(cfg.ocpp.acceptUnknownChargePoints);
   document.getElementById("ocppAcceptTags").value = String(cfg.ocpp.acceptUnknownIdTags);
   document.getElementById("raw").value = JSON.stringify(cfg, null, 2);
 
+  // Grid — schema-driven.
+  document.getElementById("grid").innerHTML = formCard(
+    "grid", schema.grid.fields, cfg.grid,
+    `<button onclick="saveGrid()">Save grid</button>`);
+
+  // Devices — schema-driven, one card per kind.
   const host = document.getElementById("devices");
   host.innerHTML = "";
-  for (const kind of KINDS) {
+  for (const kind of Object.keys(schema.deviceKinds)) {
+    const fields = schema.deviceKinds[kind].fields;
     const items = cfg.devices[kind] || [];
     const card = document.createElement("div");
     card.className = "card";
-    let rows = items.map(d => `<tr><td>${d.name ?? "(unnamed)"}</td>
-      <td class="muted">${d.type}${d.host ? " @ " + d.host : ""}${d.chargePointId ? " · " + d.chargePointId : ""}</td>
-      <td style="text-align:right"><button class="danger" ${readOnly ? "disabled" : ""}
-        onclick="delDevice('${kind}','${d.name}')">Delete</button></td></tr>`).join("");
-    if (!rows) rows = `<tr><td class="muted" colspan="3">none</td></tr>`;
-    card.innerHTML = `<strong>${kind}</strong><table>${rows}</table>`;
+    let html = `<div class="row"><strong>${kind}</strong></div>`;
+    items.forEach((d, i) => {
+      const fid = `${kind}-${i}`;
+      html += `<div class="dev"><div class="grid2">${renderFields(fields, d, fid)}</div>
+        <div class="row" style="margin-top:8px"><span></span><span>
+          <button class="secondary" onclick="saveDevice('${kind}','${esc(d.name)}','${fid}')">Save</button>
+          <button class="danger" onclick="delDevice('${kind}','${esc(d.name)}')">Delete</button>
+        </span></div></div>`;
+    });
+    const addId = `${kind}-add`;
+    html += `<div class="dev"><div class="muted">Add new ${kind}</div>
+      <div class="grid2">${renderFields(fields, {}, addId)}</div>
+      <div class="row" style="margin-top:8px"><span></span>
+        <button onclick="addDevice('${kind}','${addId}')">Add ${kind}</button></div></div>`;
+    card.innerHTML = html;
     host.appendChild(card);
   }
+
+  // Disable every write control in read-only mode (Reload stays enabled).
+  if (readOnly) document.querySelectorAll("button").forEach(b => {
+    if (b.getAttribute("onclick") !== "load()") b.disabled = true;
+  });
 }
 
+function formCard(formId, fields, obj, buttonsHtml) {
+  return `<div class="card"><div class="grid2">${renderFields(fields, obj, formId)}</div>
+    <div class="row" style="margin-top:10px"><span></span>${buttonsHtml}</div></div>`;
+}
+
+// ---- actions ----------------------------------------------------------------
 async function saveGrid() {
-  try {
-    const grid = { ...state.config.grid, host: document.getElementById("gridHost").value };
-    state = await api("PUT", "/api/config/grid", grid);
-    render(); msg("Grid saved.", "ok");
-  } catch (e) {}
+  try { state = await api("PUT", "/api/config/grid", collectFields(schema.grid.fields, "grid")); render(); msg("Grid saved.", "ok"); }
+  catch (e) {}
 }
-
 async function saveSettings() {
   try {
-    const settings = {
+    state = await api("PUT", "/api/config/settings", {
       ocpp: { ...state.config.ocpp,
         acceptUnknownChargePoints: document.getElementById("ocppAcceptCp").value === "true",
         acceptUnknownIdTags: document.getElementById("ocppAcceptTags").value === "true" },
       strategy: document.getElementById("strategy").value,
       pollIntervalMs: parseInt(document.getElementById("pollIntervalMs").value, 10),
-    };
-    state = await api("PUT", "/api/config/settings", settings);
+    });
     render(); msg("Settings saved (applied on next restart).", "ok");
   } catch (e) {}
 }
-
-async function addDevice() {
+async function addDevice(kind, formId) {
   try {
-    const kind = document.getElementById("addKind").value;
-    const body = JSON.parse(document.getElementById("addJson").value);
+    const body = collectFields(schema.deviceKinds[kind].fields, formId);
     state = await api("POST", "/api/config/devices/" + kind, body);
-    document.getElementById("addJson").value = "";
-    render(); msg("Device added.", "ok");
-  } catch (e) { if (e instanceof SyntaxError) msg("Device JSON is not valid JSON.", "err"); }
-}
-
-async function delDevice(kind, name) {
-  if (!confirm(`Delete ${kind} "${name}"?`)) return;
-  try {
-    state = await api("DELETE", `/api/config/devices/${kind}/${encodeURIComponent(name)}`);
-    render(); msg("Device deleted.", "ok");
+    render(); msg(`${kind} added.`, "ok");
   } catch (e) {}
 }
-
-async function saveRaw() {
+async function saveDevice(kind, name, formId) {
   try {
-    const body = JSON.parse(document.getElementById("raw").value);
-    state = await api("PUT", "/api/config", body);
-    render(); msg("Full config saved.", "ok");
-  } catch (e) { if (e instanceof SyntaxError) msg("Config JSON is not valid JSON.", "err"); }
+    const body = collectFields(schema.deviceKinds[kind].fields, formId);
+    state = await api("PUT", `/api/config/devices/${kind}/${encodeURIComponent(name)}`, body);
+    render(); msg(`${kind} saved.`, "ok");
+  } catch (e) {}
+}
+async function delDevice(kind, name) {
+  if (!confirm(`Delete ${kind} "${name}"?`)) return;
+  try { state = await api("DELETE", `/api/config/devices/${kind}/${encodeURIComponent(name)}`); render(); msg(`${kind} deleted.`, "ok"); }
+  catch (e) {}
+}
+async function saveRaw() {
+  try { state = await api("PUT", "/api/config", JSON.parse(document.getElementById("raw").value)); render(); msg("Full config saved.", "ok"); }
+  catch (e) { if (e instanceof SyntaxError) msg("Config JSON is not valid JSON.", "err"); }
 }
 
 load();

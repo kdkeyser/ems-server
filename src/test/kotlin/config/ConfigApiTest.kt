@@ -45,6 +45,15 @@ class ConfigApiTest {
     }
 
     @Test
+    fun `GET schema returns the device kinds`() = testApplication {
+        installApi(service(ConfigSource.database))
+        val resp = client.get("/api/config/schema") { basicAuth("admin", "secret") }
+        assertEquals(HttpStatusCode.OK, resp.status)
+        val schema = json.decodeFromString<ConfigSchema>(resp.bodyAsText())
+        assertEquals(setOf("solar", "charger", "battery", "heatPump", "car"), schema.deviceKinds.keys)
+    }
+
+    @Test
     fun `GET returns source, version and config`() = testApplication {
         installApi(service(ConfigSource.database))
         val resp = client.get("/api/config") { basicAuth("admin", "secret") }

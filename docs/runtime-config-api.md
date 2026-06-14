@@ -198,6 +198,13 @@ live-teardown work is isolated in the last phase so the plumbing can be verified
   validation → 422 (per-field), success → full effective document + `source` + `version`.
 - `resources/config.html` editor page (structured grid/settings/device forms + raw full-config
   editor; read-only banner in `file` mode).
+- **Schema-driven forms** (2026-06-14): `config/ConfigSchema.kt` derives a form schema from the
+  `@Serializable` descriptors of the device classes (field names, primitive/enum/object kinds,
+  enum options, required-vs-optional from defaults/nullability); served at
+  `GET /api/config/schema`. `config.html` renders grid + device add/edit forms generically from
+  it, so a new device type or field — or a whole new device kind — needs **no frontend change**.
+  Conditional requiredness a descriptor can't express (charger `host` for Webasto vs
+  `chargePointId` for OCPP) stays in `Config.validate` and surfaces as 422. Test: `ConfigSchemaTest`.
 - Added editable tuning fields `strategy` (StrategyType) and `pollIntervalMs` to `Config`,
   wired live at boot (`provideStrategy` resolves from config; main loop uses `pollIntervalMs`).
 - Tests: `ConfigApiTest` (auth, GET, file-mode 409, db-mode PUT round-trip, add device,

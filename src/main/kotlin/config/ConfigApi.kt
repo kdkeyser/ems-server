@@ -31,6 +31,8 @@ private data class ErrorBody(val message: String)
  */
 fun Application.configureConfigApi(configService: ConfigService) {
     val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
+    // Derived from the @Serializable config model; stable for the process lifetime, so build once.
+    val schemaJson = json.encodeToString(ConfigSchemaBuilder.build())
 
     fun current() = configService.current()
 
@@ -60,6 +62,9 @@ fun Application.configureConfigApi(configService: ConfigService) {
             }
 
             route("/api/config") {
+                // How config objects are shaped, so clients can render forms without hard-coding fields.
+                get("/schema") { call.respondText(schemaJson, ContentType.Application.Json) }
+
                 get { call.respondConfig(current()) }
                 put { call.applyCandidate(call.receive<Config>()) }
 

@@ -1,3 +1,10 @@
+# Where the effective device/settings config comes from:
+#   file     — this yaml is the source of truth (default; the config API is read-only)
+#   database — devices + tuning live in SQLite, editable at runtime via the config API;
+#              seeded from this file on first use. Bootstrap fields (database, clickhouse,
+#              websocket, refreshThreads) always come from this file regardless.
+configSource: file
+
 ocpp:
   enabled: true
   heartbeatInterval: 300

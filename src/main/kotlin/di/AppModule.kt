@@ -9,6 +9,7 @@ import io.konektis.cardata.CarDataService
 import io.konektis.cardata.CarDataTokenStore
 import io.konektis.cardata.SqlCarDataTokenStore
 import io.konektis.config.Config
+import io.konektis.config.StrategyType
 import io.konektis.devices.World
 import io.konektis.ems.EnergyManager
 import io.konektis.ems.Strategy
@@ -58,7 +59,10 @@ interface AppModule {
         DataCollector(config.refreshThreads, world)
 
     @Provides
-    fun provideStrategy(): Strategy = SurplusPriorityStrategy()
+    fun provideStrategy(config: Config): Strategy = when (config.strategy) {
+        StrategyType.SurplusPriority -> SurplusPriorityStrategy()
+        StrategyType.SimpleGridCompensation -> SimpleGridCompensationStrategy()
+    }
 
     @ApplicationScope
     @Provides

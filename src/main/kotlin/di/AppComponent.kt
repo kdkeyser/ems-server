@@ -3,6 +3,7 @@ package io.konektis.di
 import io.konektis.DataCollector
 import io.konektis.cardata.CarDataService
 import io.konektis.config.Config
+import io.konektis.config.ConfigService
 import io.konektis.devices.World
 import io.konektis.ems.EnergyManager
 import io.konektis.history.HistoryRepository
@@ -16,7 +17,8 @@ import org.jetbrains.exposed.sql.Database
 @ApplicationScope
 @Component
 abstract class AppComponent(
-    @get:Provides val config: Config
+    @get:Provides val config: Config,
+    @get:Provides val configService: ConfigService,
 ) : AppModule {
     abstract val httpClient: HttpClient
     abstract val world: World

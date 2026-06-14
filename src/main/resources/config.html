@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EMS Config</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #111827; color: #e5e7eb; padding: 20px; max-width: 860px; margin: 0 auto; }
+    h1 { color: #93c5fd; font-size: 1.2rem; margin-bottom: 4px; }
+    h2 { color: #93c5fd; font-size: 1rem; margin: 22px 0 8px; }
+    .card { background: #1f2937; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+    .row { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .muted { color: #9ca3af; font-size: 0.8rem; }
+    .pill { font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; background: #374151; }
+    .pill.db { background: #065f46; color: #d1fae5; }
+    .pill.file { background: #374151; color: #d1d5db; }
+    label { font-size: 0.8rem; color: #9ca3af; display: block; margin: 6px 0 2px; }
+    button { background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 0.8rem; }
+    button.secondary { background: #374151; }
+    button.danger { background: #7c2d12; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    input, select, textarea { background: #111827; border: 1px solid #374151; color: #e5e7eb; border-radius: 6px; padding: 5px 8px; font-size: 0.8rem; width: 100%; }
+    textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; min-height: 220px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #374151; }
+    .banner { padding: 8px 12px; border-radius: 6px; margin: 10px 0; display: none; }
+    .banner.ro { background: #78350f; color: #fde68a; display: block; }
+    .banner.err { background: #7f1d1d; color: #fecaca; }
+    .banner.ok { background: #065f46; color: #d1fae5; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  </style>
+</head>
+<body>
+  <h1>EMS Configuration</h1>
+  <div class="row">
+    <span class="muted">Source: <span id="source" class="pill"></span> · revision <span id="version">–</span></span>
+    <button class="secondary" onclick="load()">Reload</button>
+  </div>
+  <div id="roBanner" class="banner ro">Config is file-sourced (<code>configSource: file</code>) and read-only.
+    Set <code>configSource: database</code> in config.yaml to edit here.</div>
+  <div id="msg" class="banner"></div>
+
+  <h2>Grid meter</h2>
+  <div class="card">
+    <div class="grid2">
+      <div><label>Type</label><input id="gridType" disabled></div>
+      <div><label>Host</label><input id="gridHost"></div>
+    </div>
+    <div class="row" style="margin-top:10px"><span></span><button id="saveGrid" onclick="saveGrid()">Save grid</button></div>
+  </div>
+
+  <h2>Settings</h2>
+  <div class="card">
+    <div class="grid2">
+      <div><label>Strategy</label>
+        <select id="strategy">
+          <option value="SurplusPriority">SurplusPriority</option>
+          <option value="SimpleGridCompensation">SimpleGridCompensation</option>
+        </select></div>
+      <div><label>Poll interval (ms)</label><input id="pollIntervalMs" type="number" min="250"></div>
+      <div><label>OCPP — accept unknown charge points</label>
+        <select id="ocppAcceptCp"><option value="false">false</option><option value="true">true</option></select></div>
+      <div><label>OCPP — accept unknown idTags</label>
+        <select id="ocppAcceptTags"><option value="true">true</option><option value="false">false</option></select></div>
+    </div>
+    <div class="row" style="margin-top:10px"><span class="muted">Applied on next restart.</span>
+      <button id="saveSettings" onclick="saveSettings()">Save settings</button></div>
+  </div>
+
+  <h2>Devices</h2>
+  <div id="devices"></div>
+
+  <h2>Add device</h2>
+  <div class="card">
+    <label>Kind</label>
+    <select id="addKind">
+      <option value="solar">solar</option><option value="charger">charger</option>
+      <option value="battery">battery</option><option value="heatPump">heatPump</option>
+      <option value="car">car</option>
+    </select>
+    <label style="margin-top:8px">Device JSON</label>
+    <textarea id="addJson" style="min-height:90px" placeholder='{"type":"SMA_Sunny_Boy","name":"Roof","host":"192.168.1.20"}'></textarea>
+    <div class="row" style="margin-top:8px"><span></span><button id="addDevice" onclick="addDevice()">Add device</button></div>
+  </div>
+
+  <h2>Full config (raw)</h2>
+  <div class="card">
+    <textarea id="raw"></textarea>
+    <div class="row" style="margin-top:8px"><span class="muted">PUT /api/config — replaces the whole document.</span>
+      <button id="saveRaw" onclick="saveRaw()">Save full config</button></div>
+  </div>
+
+<script>
+const KINDS = ["solar", "charger", "battery", "heatPump", "car"];
+let state = null;       // last ConfigResponse
+let readOnly = false;
+
+function msg(text, kind) {
+  const el = document.getElementById("msg");
+  el.className = "banner " + kind;
+  el.style.display = "block";
+  el.textContent = text;
+}
+function clearMsg() { const el = document.getElementById("msg"); el.style.display = "none"; }
+
+function setReadOnly(ro) {
+  readOnly = ro;
+  document.getElementById("roBanner").style.display = ro ? "block" : "none";
+  document.querySelectorAll("button").forEach(b => {
+    if (b.id && b.id !== "") b.disabled = ro && b.getAttribute("onclick") !== "load()";
+  });
+}
+
+async function api(method, path, body) {
+  const opts = { method, headers: {} };
+  if (body !== undefined) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+  const res = await fetch(path, opts);
+  if (res.status === 409) { msg("Read-only: config is file-sourced.", "err"); throw new Error("read-only"); }
+  if (res.status === 422) {
+    const errs = await res.json();
+    msg("Validation failed: " + errs.map(e => e.field + " — " + e.message).join("; "), "err");
+    throw new Error("invalid");
+  }
+  if (!res.ok) { msg("Request failed: " + res.status, "err"); throw new Error("http " + res.status); }
+  return res.status === 200 && res.headers.get("content-type")?.includes("json") ? res.json() : null;
+}
+
+async function load() {
+  clearMsg();
+  const res = await fetch("/api/config");
+  if (!res.ok) { msg("Could not load config: " + res.status, "err"); return; }
+  state = await res.json();
+  render();
+}
+
+function render() {
+  const cfg = state.config;
+  document.getElementById("source").textContent = state.source;
+  document.getElementById("source").className = "pill " + (state.source === "database" ? "db" : "file");
+  document.getElementById("version").textContent = state.version;
+  setReadOnly(state.source !== "database");
+
+  document.getElementById("gridType").value = cfg.grid.type;
+  document.getElementById("gridHost").value = cfg.grid.host;
+  document.getElementById("strategy").value = cfg.strategy;
+  document.getElementById("pollIntervalMs").value = cfg.pollIntervalMs;
+  document.getElementById("ocppAcceptCp").value = String(cfg.ocpp.acceptUnknownChargePoints);
+  document.getElementById("ocppAcceptTags").value = String(cfg.ocpp.acceptUnknownIdTags);
+  document.getElementById("raw").value = JSON.stringify(cfg, null, 2);
+
+  const host = document.getElementById("devices");
+  host.innerHTML = "";
+  for (const kind of KINDS) {
+    const items = cfg.devices[kind] || [];
+    const card = document.createElement("div");
+    card.className = "card";
+    let rows = items.map(d => `<tr><td>${d.name ?? "(unnamed)"}</td>
+      <td class="muted">${d.type}${d.host ? " @ " + d.host : ""}${d.chargePointId ? " · " + d.chargePointId : ""}</td>
+      <td style="text-align:right"><button class="danger" ${readOnly ? "disabled" : ""}
+        onclick="delDevice('${kind}','${d.name}')">Delete</button></td></tr>`).join("");
+    if (!rows) rows = `<tr><td class="muted" colspan="3">none</td></tr>`;
+    card.innerHTML = `<strong>${kind}</strong><table>${rows}</table>`;
+    host.appendChild(card);
+  }
+}
+
+async function saveGrid() {
+  try {
+    const grid = { ...state.config.grid, host: document.getElementById("gridHost").value };
+    state = await api("PUT", "/api/config/grid", grid);
+    render(); msg("Grid saved.", "ok");
+  } catch (e) {}
+}
+
+async function saveSettings() {
+  try {
+    const settings = {
+      ocpp: { ...state.config.ocpp,
+        acceptUnknownChargePoints: document.getElementById("ocppAcceptCp").value === "true",
+        acceptUnknownIdTags: document.getElementById("ocppAcceptTags").value === "true" },
+      strategy: document.getElementById("strategy").value,
+      pollIntervalMs: parseInt(document.getElementById("pollIntervalMs").value, 10),
+    };
+    state = await api("PUT", "/api/config/settings", settings);
+    render(); msg("Settings saved (applied on next restart).", "ok");
+  } catch (e) {}
+}
+
+async function addDevice() {
+  try {
+    const kind = document.getElementById("addKind").value;
+    const body = JSON.parse(document.getElementById("addJson").value);
+    state = await api("POST", "/api/config/devices/" + kind, body);
+    document.getElementById("addJson").value = "";
+    render(); msg("Device added.", "ok");
+  } catch (e) { if (e instanceof SyntaxError) msg("Device JSON is not valid JSON.", "err"); }
+}
+
+async function delDevice(kind, name) {
+  if (!confirm(`Delete ${kind} "${name}"?`)) return;
+  try {
+    state = await api("DELETE", `/api/config/devices/${kind}/${encodeURIComponent(name)}`);
+    render(); msg("Device deleted.", "ok");
+  } catch (e) {}
+}
+
+async function saveRaw() {
+  try {
+    const body = JSON.parse(document.getElementById("raw").value);
+    state = await api("PUT", "/api/config", body);
+    render(); msg("Full config saved.", "ok");
+  } catch (e) { if (e instanceof SyntaxError) msg("Config JSON is not valid JSON.", "err"); }
+}
+
+load();
+</script>
+</body>
+</html>

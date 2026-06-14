@@ -6,6 +6,7 @@ import io.konektis.config.Config
 import io.konektis.config.GridMeterType
 import io.konektis.config.HeatPumpType
 import io.konektis.config.SolarType
+import io.konektis.config.validatedOrThrow
 import io.konektis.devices.Heatpump.DaikinHeatpump
 import io.konektis.devices.Solar.SMASolar
 import io.konektis.devices.battery.Battery
@@ -28,15 +29,7 @@ data class World(
 ) {
     companion object {
         fun fromConfig(config: Config, ocppService: OcppService): World {
-            require(config.devices.charger.size <= 1) {
-                "Only one charger is supported; got ${config.devices.charger.map { it.name }}"
-            }
-            require(config.devices.battery.size <= 1) {
-                "Only one battery is supported; got ${config.devices.battery.map { it.name }}"
-            }
-            require(config.devices.heatPump.size <= 1) {
-                "Only one heat pump is supported; got ${config.devices.heatPump.map { it.name }}"
-            }
+            config.validatedOrThrow()
             val grid = when (config.grid.type) {
                 GridMeterType.P1HomeWizard -> P1Meter(config.grid.host)
             }

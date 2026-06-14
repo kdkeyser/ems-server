@@ -6,9 +6,14 @@ import io.klogging.config.loggingConfiguration
 import io.klogging.rendering.RENDER_SIMPLE
 import io.klogging.sending.STDOUT
 import io.konektis.config.ClickHouseConfig
+import io.konektis.config.ConfigService
+import io.konektis.config.ConfigSource
+import io.konektis.config.ConfigStore
+import io.konektis.config.configureConfigApi
 import io.konektis.config.loadConfig
 import io.konektis.config.startupWarnings
 import io.konektis.config.WebSocketConfig
+import io.konektis.ocpp.db.openDatabase
 import io.konektis.history.HistoryRepository
 import io.konektis.history.configureHistoryAuthenticated
 import io.konektis.di.AppComponent
@@ -44,9 +49,16 @@ class Main : Klogging {
             }
         }
 
-        val config = loadConfig("/config.yaml")
+        val fileConfig = loadConfig("/config.yaml")
+        // Resolve the effective config: in `file` mode this is the yaml as-is; in `database` mode it
+        // comes from SQLite (seeded from the yaml on first use), with bootstrap fields kept from the
+        // file. The DB path itself is bootstrap, so it always comes from the file.
+        val configStore = ConfigStore(openDatabase(fileConfig.database.path)).also { it.init() }
+        val configService = ConfigService(fileConfig, configStore)
+        val config = configService.resolve()
 
         logger.info("EMS server starting")
+        logger.info("Config source: ${config.configSource}")
         logger.info("Grid: ${config.grid.type} @ ${config.grid.host}")
         if (config.devices.solar.isNotEmpty())
             logger.info("Solar: ${config.devices.solar.joinToString { "${it.name} @ ${it.host}" }}")
@@ -60,7 +72,7 @@ class Main : Klogging {
         config.startupWarnings().forEach { logger.warn(it) }
 
         // Create the DI component
-        val component = AppComponent::class.create(config)
+        val component = AppComponent::class.create(config, configService)
 
         val dataCollector = component.dataCollector
         val energyManager = component.energyManager
@@ -84,7 +96,7 @@ class Main : Klogging {
                 while (true) {
                     dataCollector.refresh()
                     energyManager.tick()
-                    delay(5_000)
+                    delay(config.pollIntervalMs)
                 }
             }
             launch { component.carDataService.start() }
@@ -95,6 +107,7 @@ class Main : Klogging {
                         energyManager, config.websocket, dataCollector.statusStateFlow,
                         component.ocppService,
                         component.historyRepository, config.clickhouse,
+                        configService,
                     )
                 }
                 server.start(wait = true)
@@ -108,6 +121,7 @@ fun Application.module(
     energyManager: EnergyManager, wsConfig: WebSocketConfig, statusFlow: Flow<StatusState?>,
     ocppService: io.konektis.ocpp.OcppService,
     historyRepository: HistoryRepository, clickhouse: ClickHouseConfig,
+    configService: io.konektis.config.ConfigService,
 ) {
     install(ContentNegotiation) { json() }
     configureSecurity(wsConfig)
@@ -116,5 +130,6 @@ fun Application.module(
     configureOcppServer(ocppService)
     configureOcppWebUi(ocppService, energyManager)
     configureHistoryAuthenticated(clickhouse, historyRepository)
+    configureConfigApi(configService)
     configureMonitoring()
 }

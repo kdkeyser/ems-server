@@ -48,6 +48,7 @@ data class Charger(
     val connectorId: Int = 1,
 )
 
+@Serializable
 enum class BatteryType {
     SMA_Sunny_Boy_Storage,
 }
@@ -94,6 +95,25 @@ data class DatabaseConfig(val path: String = "ems.db")
 @Serializable
 data class WebSocketConfig(val username: String, val password: String)
 
+/**
+ * Where the effective device/settings config comes from.
+ *
+ * - [file]: the yaml file is the source of truth (today's behaviour); the runtime config API is
+ *   read-only.
+ * - [database]: the configurable subtree (devices + tuning) lives in SQLite and is editable at
+ *   runtime via the config API. The DB is seeded from the yaml file on first use. Bootstrap fields
+ *   ([database], [Config.clickhouse], [Config.websocket], [Config.refreshThreads], [configSource])
+ *   are always taken from the file regardless of this setting.
+ *
+ * Lowercase names match the yaml (`configSource: file`).
+ */
+@Serializable
+enum class ConfigSource { file, database }
+
+/** Selectable control strategy (see ems/Strategy.kt). Editable tuning, applied at boot. */
+@Serializable
+enum class StrategyType { SurplusPriority, SimpleGridCompensation }
+
 @Serializable
 data class Config(
     val grid: Grid,
@@ -102,7 +122,19 @@ data class Config(
     val websocket: WebSocketConfig = WebSocketConfig("user", "password"),
     val database: DatabaseConfig = DatabaseConfig(),
     val clickhouse: ClickHouseConfig = ClickHouseConfig(),
-    val refreshThreads : Int = 50
+    val refreshThreads : Int = 50,
+    val configSource: ConfigSource = ConfigSource.file,
+    val strategy: StrategyType = StrategyType.SurplusPriority,
+    val pollIntervalMs: Long = 5_000,
+)
+
+/** Bootstrap/security fields are never taken from the DB document — always from the yaml file. */
+fun Config.withBootstrapFrom(file: Config): Config = copy(
+    database = file.database,
+    clickhouse = file.clickhouse,
+    websocket = file.websocket,
+    refreshThreads = file.refreshThreads,
+    configSource = file.configSource,
 )
 
 fun Config.startupWarnings(): List<String> = buildList {

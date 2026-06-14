@@ -29,7 +29,10 @@ import io.ktor.server.netty.Netty
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -83,20 +86,41 @@ class Main : Klogging {
         Runtime.getRuntime().addShutdownHook(Thread {
             runBlocking {
                 withTimeoutOrNull(3_000) {
-                    component.world.battery?.let {
+                    component.worldHolder.current.battery?.let {
                         runCatching { it.releaseToInverter() }
                     }
                 }
             }
         })
 
+        val worldHolder = component.worldHolder
+        // The poll/control tick and config-driven graph rebuilds must never overlap: a swap that lands
+        // mid-tick could steer the wrong (half-torn-down) battery. One mutex serialises both.
+        val reloadMutex = Mutex()
+
         coroutineScope {
             energyManager.loadChargerControl()
             launch {
                 while (true) {
-                    dataCollector.refresh()
-                    energyManager.tick()
-                    delay(config.pollIntervalMs)
+                    reloadMutex.withLock {
+                        dataCollector.refresh()
+                        energyManager.tick()
+                    }
+                    delay(configService.current().pollIntervalMs)
+                }
+            }
+            // Hot-reload: rebuild the live device graph whenever the (validated) config changes. Only
+            // fires in `database` mode; `file` mode never emits past the initial value. drop(1) skips
+            // that initial value (already applied at boot).
+            launch {
+                configService.configFlow.drop(1).collect { newConfig ->
+                    reloadMutex.withLock {
+                        runCatching {
+                            val newWorld = io.konektis.devices.World.fromConfig(newConfig, component.ocppService)
+                            worldHolder.swap(newWorld).shutdown()
+                        }.onFailure { logger.error("Config reload failed; keeping the previous device graph", it) }
+                            .onSuccess { logger.info("Reloaded device graph from config revision ${configService.version}") }
+                    }
                 }
             }
             launch { component.carDataService.start() }

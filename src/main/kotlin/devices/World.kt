@@ -27,6 +27,19 @@ data class World(
     val heatPump: SmartConsumer?,
     val battery: Battery?,
 ) {
+    /**
+     * Gracefully release this (now-superseded) device graph. The safety-critical step is handing the
+     * battery back to the inverter (write 803) before its connection is dropped — the SMA watchdog is
+     * too slow (≥15 min) to recover a stale setpoint. Same intent as the process shutdown hook.
+     *
+     * Orphaned Modbus sockets on replaced devices are left to the driver's lazy reconnect/GC rather
+     * than plumbing an explicit close through every device interface — reconfiguration is rare and the
+     * digitalpetri client drops broken/idle transports on its own. (Follow-up if it proves to leak.)
+     */
+    suspend fun shutdown() {
+        battery?.let { runCatching { it.releaseToInverter() } }
+    }
+
     companion object {
         fun fromConfig(config: Config, ocppService: OcppService): World {
             config.validatedOrThrow()

@@ -9,6 +9,7 @@ import io.konektis.config.Config
 import io.konektis.devices.Ampere
 import io.konektis.devices.Watt
 import io.konektis.devices.World
+import io.konektis.devices.WorldHolder
 import io.konektis.devices.charger.ChargerCommand
 import io.konektis.devices.charger.ChargerConnection
 import io.konektis.devices.smartConsumers.ConsumeMode
@@ -26,12 +27,23 @@ import java.time.Instant
 import kotlin.time.Duration.Companion.seconds
 
 class EnergyManager(
-    private val world: World,
-    private val config: Config,
+    private val worldHolder: WorldHolder,
+    private val configProvider: () -> Config,
     private val strategy: Strategy,
     private val chargerControlStore: ChargerControlStore,
     private val carDataService: CarDataService? = null,
 ) : Klogging {
+
+    /** Fixed-graph convenience (tests and any caller without hot-reload): static world + config. */
+    constructor(
+        world: World, config: Config, strategy: Strategy,
+        chargerControlStore: ChargerControlStore, carDataService: CarDataService? = null,
+    ) : this(WorldHolder(world), { config }, strategy, chargerControlStore, carDataService)
+
+    // The live device graph and config, re-read on every access so a hot-reload is picked up. Strategy
+    // and the per-device thread pool stay boot-fixed (a strategy/refreshThreads change needs a restart).
+    private val world: World get() = worldHolder.current
+    private val config: Config get() = configProvider()
 
     private var previousMode = ManagerMode.AUTO
     private var blindTicks = 0

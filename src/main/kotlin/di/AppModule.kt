@@ -9,8 +9,10 @@ import io.konektis.cardata.CarDataService
 import io.konektis.cardata.CarDataTokenStore
 import io.konektis.cardata.SqlCarDataTokenStore
 import io.konektis.config.Config
+import io.konektis.config.ConfigService
 import io.konektis.config.StrategyType
 import io.konektis.devices.World
+import io.konektis.devices.WorldHolder
 import io.konektis.ems.EnergyManager
 import io.konektis.ems.Strategy
 import io.konektis.ems.SurplusPriorityStrategy
@@ -52,11 +54,12 @@ interface AppModule {
 
     @ApplicationScope
     @Provides
-    fun provideWorld(config: Config, ocppService: OcppService): World = World.fromConfig(config, ocppService)
+    fun provideWorldHolder(config: Config, ocppService: OcppService): WorldHolder =
+        WorldHolder(World.fromConfig(config, ocppService))
 
     @Provides
-    fun provideDataCollector(config: Config, world: World): DataCollector =
-        DataCollector(config.refreshThreads, world)
+    fun provideDataCollector(config: Config, worldHolder: WorldHolder): DataCollector =
+        DataCollector(config.refreshThreads, worldHolder)
 
     @Provides
     fun provideStrategy(config: Config): Strategy = when (config.strategy) {
@@ -71,9 +74,9 @@ interface AppModule {
     @ApplicationScope
     @Provides
     fun provideEnergyManager(
-        world: World, config: Config, strategy: Strategy,
+        worldHolder: WorldHolder, configService: ConfigService, strategy: Strategy,
         chargerControlStore: ChargerControlStore, carDataService: CarDataService,
-    ): EnergyManager = EnergyManager(world, config, strategy, chargerControlStore, carDataService)
+    ): EnergyManager = EnergyManager(worldHolder, configService::current, strategy, chargerControlStore, carDataService)
 
     @ApplicationScope
     @Provides

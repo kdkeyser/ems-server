@@ -4,7 +4,7 @@ import io.konektis.DataCollector
 import io.konektis.cardata.CarDataService
 import io.konektis.config.Config
 import io.konektis.config.ConfigService
-import io.konektis.devices.World
+import io.konektis.devices.WorldHolder
 import io.konektis.ems.EnergyManager
 import io.konektis.history.HistoryRepository
 import io.konektis.history.HistoryWriter
@@ -21,7 +21,7 @@ abstract class AppComponent(
     @get:Provides val configService: ConfigService,
 ) : AppModule {
     abstract val httpClient: HttpClient
-    abstract val world: World
+    abstract val worldHolder: WorldHolder
     abstract val dataCollector: DataCollector
     abstract val energyManager: EnergyManager
     abstract val database: Database

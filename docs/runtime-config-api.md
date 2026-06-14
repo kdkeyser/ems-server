@@ -1,6 +1,7 @@
 # Runtime device & settings configuration (DB-backed) + config API
 
-**Status:** Phases 1–2 implemented (2026-06-14); Phase 3 (live hot-reload) pending
+**Status:** Phases 1–3 implemented (2026-06-14). Phase 3 (live hot-reload) is code-complete
+and unit-tested but **not yet hardware-verified** (the battery 803 hand-back on swap).
 
 ## Goal
 
@@ -203,12 +204,25 @@ live-teardown work is isolated in the last phase so the plumbing can be verified
   validation 422); `ConfigServiceTest`/`ConfigStoreTest` extended. Full `./gradlew build` green.
 - Changes take effect on the next restart; the live device graph is still the boot snapshot.
 
-**Phase 3 — live hot-reload**
-- `WorldHolder`; `DataCollector`/`EnergyManager` read the live world; reload orchestration
-  with graceful teardown.
-- **Hardware verification required**: confirm the battery `803` hand-back fires on swap
-  before the old connection drops (reference: the shutdown hook in `Application.kt` and the
-  battery hand-back work).
+**Phase 3 — live hot-reload** — ✅ code-complete (2026-06-14), ⚠️ hardware verification pending
+- `devices/WorldHolder.kt`: `@Volatile current` + `swap()` returning the old graph. The DI
+  singleton; `DataCollector` and `EnergyManager` read the live world through it.
+- `DataCollector`/`EnergyManager` primary constructors now take the holder (+ a `() -> Config`
+  provider for the manager); secondary constructors keep the old `(world, config, …)` form so
+  every existing test compiles unchanged. `EnergyManager` re-reads `world`/`config` per access,
+  so device topology, connection details and per-tick config (charging current) hot-reload.
+  Strategy and `refreshThreads` stay boot-fixed (documented as restart-to-change).
+- `World.shutdown()`: hands the battery back to the inverter (803). Orphaned Modbus sockets on
+  replaced devices are left to the driver's reconnect/GC (noted follow-up, not plumbed).
+- Reload orchestration in `Application.kt`: a single `Mutex` serialises the poll/control tick
+  against graph rebuilds; a coroutine collects `ConfigService.configFlow` (`drop(1)`), rebuilds
+  `World`, swaps it in, and `shutdown()`s the old graph. Main loop now uses the live
+  `pollIntervalMs`. Reload failures are logged and keep the previous graph.
+- Tests: `WorldHotReloadTest` (holder swap, `shutdown()` releases battery, `EnergyManager`
+  steers the swapped-in battery). Full `./gradlew build` green.
+- **Still required: hardware verification** — confirm on real hardware that the 803 hand-back
+  fires on swap before the old connection drops, and that a re-IP/retype reconnects cleanly.
+  Reference: the process shutdown hook and the battery hand-back work.
 
 ## Files touched
 

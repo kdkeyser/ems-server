@@ -2,6 +2,7 @@ package io.konektis
 
 import io.klogging.Klogging
 import io.konektis.devices.World
+import io.konektis.devices.WorldHolder
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
@@ -14,9 +15,13 @@ import java.util.concurrent.Executors
 
 class DataCollector(
     threads: Int,
-    val world: World,
+    private val worldHolder: WorldHolder,
     private val pollTimeoutMs: Long = 10_000,
 ) : Klogging {
+    /** Convenience for tests and callers with a fixed graph: wraps [world] in a single-value holder. */
+    constructor(threads: Int, world: World, pollTimeoutMs: Long = 10_000) :
+        this(threads, WorldHolder(world), pollTimeoutMs)
+
     private val workerPool = Executors.newFixedThreadPool(threads)
     private val dispatcher = workerPool.asCoroutineDispatcher()
     private val healthMap = ConcurrentHashMap<String, DeviceHealth>()
@@ -24,6 +29,9 @@ class DataCollector(
     val statusStateFlow = MutableStateFlow<StatusState?>(null)
 
     suspend fun refresh() {
+        // Snapshot the live graph once per cycle so a mid-refresh swap can't split a cycle across two
+        // device graphs (swaps are also mutex-serialised against the tick, so this is belt-and-braces).
+        val world = worldHolder.current
         withContext(dispatcher) {
             val jobs = mutableListOf(
                 async { poll("Grid meter", "grid") {

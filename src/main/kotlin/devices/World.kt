@@ -6,6 +6,7 @@ import io.konektis.config.Config
 import io.konektis.config.GridMeterType
 import io.konektis.config.HeatPumpType
 import io.konektis.config.SolarType
+import io.konektis.config.validatedOrThrow
 import io.konektis.devices.Heatpump.DaikinHeatpump
 import io.konektis.devices.Solar.SMASolar
 import io.konektis.devices.battery.Battery
@@ -26,17 +27,22 @@ data class World(
     val heatPump: SmartConsumer?,
     val battery: Battery?,
 ) {
+    /**
+     * Gracefully release this (now-superseded) device graph. The safety-critical step is handing the
+     * battery back to the inverter (write 803) before its connection is dropped — the SMA watchdog is
+     * too slow (≥15 min) to recover a stale setpoint. Same intent as the process shutdown hook.
+     *
+     * Orphaned Modbus sockets on replaced devices are left to the driver's lazy reconnect/GC rather
+     * than plumbing an explicit close through every device interface — reconfiguration is rare and the
+     * digitalpetri client drops broken/idle transports on its own. (Follow-up if it proves to leak.)
+     */
+    suspend fun shutdown() {
+        battery?.let { runCatching { it.releaseToInverter() } }
+    }
+
     companion object {
         fun fromConfig(config: Config, ocppService: OcppService): World {
-            require(config.devices.charger.size <= 1) {
-                "Only one charger is supported; got ${config.devices.charger.map { it.name }}"
-            }
-            require(config.devices.battery.size <= 1) {
-                "Only one battery is supported; got ${config.devices.battery.map { it.name }}"
-            }
-            require(config.devices.heatPump.size <= 1) {
-                "Only one heat pump is supported; got ${config.devices.heatPump.map { it.name }}"
-            }
+            config.validatedOrThrow()
             val grid = when (config.grid.type) {
                 GridMeterType.P1HomeWizard -> P1Meter(config.grid.host)
             }

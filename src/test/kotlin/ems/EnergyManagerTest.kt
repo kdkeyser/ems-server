@@ -114,6 +114,16 @@ class EnergyManagerTest {
         coVerify(exactly = 2) { bat.releaseToInverter() }
     }
 
+    @Test fun `blind stops a solar-mode charger from the release tick onward`() = runTest {
+        val ch = charger(0)
+        val world = World(grid(null), ch, emptyMap(), null, battery(0))
+        val m = manager(world)
+        repeat(5) { m.tick() }
+        coVerify(exactly = 0) { ch.apply(any()) } // solar mode: uncommanded while briefly blind
+        m.tick() // 6th blind tick — battery released AND charger stopped
+        coVerify(exactly = 1) { ch.apply(ChargerCommand.Stop) }
+    }
+
     @Test fun `good tick resets blind counter`() = runTest {
         val bat = battery(0)
         val g = mockk<Grid>().also {

@@ -18,8 +18,6 @@ import kotlinx.serialization.json.Json
 @Serializable data class ChargerControlBody(val mode: String, val fixedAmps: Int, val charging: Boolean)
 @Serializable data class IdTagBody(val idTag: String, val status: String)
 @Serializable data class AcceptedBody(val accepted: Boolean)
-@Serializable data class StartBody(val idTag: String, val connectorId: Int? = null)
-@Serializable data class StopBody(val transactionId: Int)
 @Serializable data class ResetBody(val type: String = "Soft")
 @Serializable data class SetCurrentBody(val amps: Double, val connectorId: Int = 1)
 @Serializable data class ClearProfileBody(val connectorId: Int? = null)
@@ -77,16 +75,17 @@ fun Application.configureOcppWebUi(service: OcppService, energyManager: EnergyMa
                     call.respond(HttpStatusCode.OK)
                 }
 
-                // Manual actions.
+                // Manual actions set the EMS *intent* (persisted ChargerControl) rather than sending
+                // raw OCPP commands: the 5 s control loop reasserts intent every tick, so a direct
+                // command would be overridden within seconds. The EMS opens/closes the transaction
+                // on its next tick.
                 post("/chargepoints/{id}/start") {
-                    val body = call.receive<StartBody>()
-                    val ok = service.remoteStart(call.parameters["id"]!!, body.idTag, body.connectorId)
-                    call.respond(if (ok) HttpStatusCode.OK else HttpStatusCode.BadGateway)
+                    energyManager.setCharging(energyManager.chargerControlFlow.value.copy(charging = true))
+                    call.respond(HttpStatusCode.OK)
                 }
                 post("/chargepoints/{id}/stop") {
-                    val body = call.receive<StopBody>()
-                    val ok = service.remoteStop(call.parameters["id"]!!, body.transactionId)
-                    call.respond(if (ok) HttpStatusCode.OK else HttpStatusCode.BadGateway)
+                    energyManager.setCharging(energyManager.chargerControlFlow.value.copy(charging = false))
+                    call.respond(HttpStatusCode.OK)
                 }
                 post("/chargepoints/{id}/reset") {
                     val body = call.receive<ResetBody>()
@@ -94,13 +93,12 @@ fun Application.configureOcppWebUi(service: OcppService, energyManager: EnergyMa
                     val ok = service.reset(call.parameters["id"]!!, type)
                     call.respond(if (ok) HttpStatusCode.OK else HttpStatusCode.BadGateway)
                 }
-                // Manual current override — bypasses the per-charger EMS-auto gate (operator action).
+                // Manual current: switch to FIXED at that current (0 A = stop charging).
                 post("/chargepoints/{id}/set-current") {
                     val body = call.receive<SetCurrentBody>()
-                    val ok = service.setChargingProfile(
-                        call.parameters["id"]!!, body.connectorId, body.amps, ChargingRateUnitType.A
-                    )
-                    call.respond(if (ok) HttpStatusCode.OK else HttpStatusCode.BadGateway)
+                    val amps = body.amps.toInt()
+                    energyManager.setCharging(ChargerControl(ChargerMode.FIXED, amps, charging = amps > 0))
+                    call.respond(HttpStatusCode.OK)
                 }
                 // Clear charging profiles (e.g. to unstick a charger left at 0 A).
                 post("/chargepoints/{id}/clear-profile") {

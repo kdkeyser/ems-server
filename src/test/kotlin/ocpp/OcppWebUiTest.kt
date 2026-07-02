@@ -20,7 +20,7 @@ import kotlin.time.Duration.Companion.seconds
 
 class OcppWebUiTest {
 
-    private fun Application.testModule(): OcppService {
+    private fun Application.testModule(): Pair<OcppService, EnergyManager> {
         install(WebSockets) { pingPeriod = 30.seconds; timeout = 60.seconds }
         install(ContentNegotiation) { json() }
         configureSecurity(io.konektis.config.WebSocketConfig("admin", "secret"))
@@ -32,7 +32,7 @@ class OcppWebUiTest {
             mockk(relaxed = true), SurplusPriorityStrategy(), SqlChargerControlStore(db),
         )
         configureOcppWebUi(svc, em)
-        return svc
+        return svc to em
     }
 
     @Test
@@ -54,7 +54,7 @@ class OcppWebUiTest {
     @Test
     fun idTagCrud() = testApplication {
         lateinit var svc: OcppService
-        application { svc = testModule() }
+        application { svc = testModule().first }
 
         val post = client.post("/ocpp-ui/api/idtags") {
             basicAuth("admin", "secret")
@@ -85,7 +85,7 @@ class OcppWebUiTest {
     @Test
     fun acceptChargePoint() = testApplication {
         lateinit var svc: OcppService
-        application { svc = testModule() }
+        application { svc = testModule().first }
         startApplication() // testApplication's application{} block is lazy; force it so svc is set
         svc.handleBootNotification("CP1", BootNotificationRequest("Acme", "X1")) // creates record (auto-accept on)
 
@@ -96,5 +96,40 @@ class OcppWebUiTest {
         }
         assertEquals(HttpStatusCode.OK, resp.status)
         assertFalse(svc.listChargePoints().single { it.chargePointId == "CP1" }.accepted)
+    }
+
+    @Test
+    fun manualStartAndStopSetTheChargingIntent() = testApplication {
+        lateinit var em: EnergyManager
+        application { em = testModule().second }
+        startApplication()
+
+        val stop = client.post("/ocpp-ui/api/chargepoints/CP1/stop") {
+            basicAuth("admin", "secret"); contentType(ContentType.Application.Json); setBody("{}")
+        }
+        assertEquals(HttpStatusCode.OK, stop.status)
+        assertFalse(em.chargerControlFlow.value.charging)
+
+        val start = client.post("/ocpp-ui/api/chargepoints/CP1/start") {
+            basicAuth("admin", "secret"); contentType(ContentType.Application.Json); setBody("{}")
+        }
+        assertEquals(HttpStatusCode.OK, start.status)
+        assertTrue(em.chargerControlFlow.value.charging)
+    }
+
+    @Test
+    fun setCurrentSwitchesToFixedMode() = testApplication {
+        lateinit var em: EnergyManager
+        application { em = testModule().second }
+        startApplication()
+
+        val resp = client.post("/ocpp-ui/api/chargepoints/CP1/set-current") {
+            basicAuth("admin", "secret"); contentType(ContentType.Application.Json)
+            setBody("""{"amps":10.0,"connectorId":1}""")
+        }
+        assertEquals(HttpStatusCode.OK, resp.status)
+        assertEquals(io.konektis.ChargerMode.FIXED, em.chargerControlFlow.value.mode)
+        assertEquals(10, em.chargerControlFlow.value.fixedAmps)
+        assertTrue(em.chargerControlFlow.value.charging)
     }
 }

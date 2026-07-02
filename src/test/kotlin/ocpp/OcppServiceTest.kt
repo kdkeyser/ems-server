@@ -175,6 +175,17 @@ class OcppServiceTest {
     }
 
     @Test
+    fun `rejected idTag does not open a live transaction`() = runTest {
+        val svc = newService(acceptTags = false) // unknown tags are rejected
+        svc.registerSession("CP1", mockk(relaxed = true))
+        val resp = svc.handleStartTransaction("CP1",
+            StartTransactionRequest(connectorId = 1, idTag = "UNKNOWN", meterStart = 0, timestamp = "2026-01-01T00:00:00Z"))
+        assertEquals(AuthorizationStatus.Invalid, resp.idTagInfo.status)
+        assertNull(svc.activeTransactionId("CP1", 1),
+            "a rejected transaction must not be tracked as charging")
+    }
+
+    @Test
     fun `reconnect without BootNotification restores persisted capabilities`() = runTest {
         val db = freshTestDb()
         val svcA = newServiceOn(db)

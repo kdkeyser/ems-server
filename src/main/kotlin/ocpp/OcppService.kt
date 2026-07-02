@@ -166,16 +166,21 @@ class OcppService(
 
     suspend fun handleStartTransaction(chargePointId: String, request: StartTransactionRequest): StartTransactionResponse {
         val transactionId = transactionIdCounter.getAndIncrement()
-        sessions[chargePointId]?.let { s ->
-            s.activeTransactions[transactionId] =
-                ActiveTransaction(transactionId, request.connectorId, request.idTag, Instant.now(), request.meterStart)
-            s.connectors.getOrPut(request.connectorId) { ConnectorState(request.connectorId) }.apply {
-                currentTransactionId = transactionId
-                status = ChargePointStatus.Charging
+        val auth = authorizeTag(request.idTag)
+        // Per OCPP 1.6 a transactionId is always returned, but a non-Accepted idTagInfo means the
+        // charge point must not deliver energy — so don't track it as a live charging session either.
+        if (auth == AuthorizationStatus.Accepted) {
+            sessions[chargePointId]?.let { s ->
+                s.activeTransactions[transactionId] =
+                    ActiveTransaction(transactionId, request.connectorId, request.idTag, Instant.now(), request.meterStart)
+                s.connectors.getOrPut(request.connectorId) { ConnectorState(request.connectorId) }.apply {
+                    currentTransactionId = transactionId
+                    status = ChargePointStatus.Charging
+                }
             }
+            recomputeState()
         }
-        recomputeState()
-        return StartTransactionResponse(transactionId, IdTagInfo(status = authorizeTag(request.idTag)))
+        return StartTransactionResponse(transactionId, IdTagInfo(status = auth))
     }
 
     suspend fun handleStopTransaction(chargePointId: String, request: StopTransactionRequest): StopTransactionResponse {

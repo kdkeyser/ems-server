@@ -175,6 +175,24 @@ class OcppServiceTest {
     }
 
     @Test
+    fun `reconnect without BootNotification restores persisted capabilities`() = runTest {
+        val db = freshTestDb()
+        val svcA = newServiceOn(db)
+        svcA.registerSession("CP1", mockk(relaxed = true))
+        svcA.handleBootNotification("CP1", BootNotificationRequest("Acme", "X1"))
+        svcA.applyCapabilityProbe("CP1", GetConfigurationResponse(
+            configurationKey = listOf(ConfigurationKey("SupportedFeatureProfiles", true, "Core,SmartCharging"))))
+        assertTrue(svcA.isPowerControlCapable("CP1"))
+
+        // Server restart: the charger reconnects but sends no BootNotification
+        // (OCPP 1.6 only requires one per charger reboot).
+        val svcB = newServiceOn(db)
+        svcB.registerSession("CP1", mockk(relaxed = true))
+        assertTrue(svcB.isPowerControlCapable("CP1"),
+            "SmartCharging capability must survive a reconnect without boot")
+    }
+
+    @Test
     fun `stale connection close does not evict a newer session`() = runTest {
         val svc = newService()
         val oldWs = mockk<DefaultWebSocketSession>(relaxed = true)

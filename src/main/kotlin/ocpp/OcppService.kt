@@ -97,7 +97,18 @@ class OcppService(
     fun getSession(id: String): ChargePointSession? = sessions[id]
 
     suspend fun registerSession(chargePointId: String, session: DefaultWebSocketSession) {
-        sessions[chargePointId] = ChargePointSession(chargePointId, session)
+        // Restore persisted facts: a charge point reconnecting without a fresh BootNotification
+        // (OCPP only requires one per reboot) must not lose its SmartCharging capability — the
+        // EMS would keep opening transactions but silently stop sending charging profiles.
+        val persisted = chargePoints.get(chargePointId)
+        sessions[chargePointId] = ChargePointSession(chargePointId, session).apply {
+            if (persisted != null) {
+                vendor = persisted.vendor
+                model = persisted.model
+                smartChargingSupported = persisted.smartChargingSupported
+                powerImportSeen = persisted.powerImportSeen
+            }
+        }
         logger.info("Registered charge point $chargePointId")
         recomputeState()
     }

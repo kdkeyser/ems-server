@@ -7,6 +7,7 @@ import io.konektis.devices.Watt
 import io.konektis.ocpp.ChargePointStatus
 import io.konektis.ocpp.ChargingRateUnitType
 import io.konektis.ocpp.OcppService
+import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -40,7 +41,16 @@ class OcppCharger(
     private val service: OcppService,
     private val idTag: String = OcppService.EMS_ID_TAG,
     private val meterStaleAfter: Duration = 90.seconds,
+    private val profileRefresh: Duration = 60.seconds,
+    private val startRetryBackoff: Duration = 30.seconds,
 ) : Charger, Klogging {
+
+    // Last profile the charge point ACCEPTED, to avoid re-sending an identical limit every
+    // 5 s tick (log noise, flash wear, and some chargers rate-limit). Refreshed periodically
+    // anyway so a charger that lost its profile (e.g. rebooted) recovers within a minute.
+    private var lastProfileAmps: Int? = null
+    private var lastProfileAt: ComparableTimeMark? = null
+    private var lastStartAttemptAt: ComparableTimeMark? = null
 
     override suspend fun update() {
         // No polling: the charger pushes MeterValues. update() is a no-op so getState() stays cheap.
@@ -82,8 +92,16 @@ class OcppCharger(
                     return
                 }
                 val amps = cmd.current.value
+                val refreshDue = lastProfileAt?.let { it.elapsedNow() >= profileRefresh } ?: true
+                if (amps == lastProfileAmps && !refreshDue) return
                 val ok = service.setChargingProfile(chargePointId, connectorId, amps.toDouble(), ChargingRateUnitType.A)
-                if (!ok) logger.warn { "OcppCharger $chargePointId: SetChargingProfile($amps A) not accepted" }
+                if (ok) {
+                    lastProfileAmps = amps
+                    lastProfileAt = GlobalTimeSource.source.markNow()
+                } else {
+                    lastProfileAmps = null // retry on the next tick
+                    logger.warn { "OcppCharger $chargePointId: SetChargingProfile($amps A) not accepted" }
+                }
             }
         }
     }
@@ -91,8 +109,14 @@ class OcppCharger(
     /** Start a transaction when a car is plugged in but none is open yet. Idempotent across ticks. */
     private suspend fun ensureTransactionStarted() {
         if (service.activeTransactionId(chargePointId, connectorId) != null) return
-        val connected = chargerConnectionFrom(service.connectorStatus(chargePointId, connectorId)) != ChargerConnection.NotConnected
-        if (!connected) return
+        val connection = chargerConnectionFrom(service.connectorStatus(chargePointId, connectorId))
+        // Only when we positively know a car is there: Unknown covers Faulted connectors and
+        // missing status, where a RemoteStart would just be rejected every tick.
+        if (connection != ChargerConnection.Connected && connection != ChargerConnection.Charging) return
+        // One attempt per backoff window: a charger that rejects RemoteStart (car full, local
+        // auth, ...) must not be hammered every 5 s tick.
+        if (lastStartAttemptAt?.let { it.elapsedNow() < startRetryBackoff } == true) return
+        lastStartAttemptAt = GlobalTimeSource.source.markNow()
         logger.info { "OcppCharger $chargePointId: car connected, no transaction open — RemoteStartTransaction" }
         val ok = service.remoteStart(chargePointId, idTag, connectorId)
         if (!ok) logger.warn { "OcppCharger $chargePointId: RemoteStartTransaction not accepted" }

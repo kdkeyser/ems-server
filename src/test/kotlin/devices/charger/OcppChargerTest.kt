@@ -170,6 +170,79 @@ class OcppChargerTest {
     }
 
     @Test
+    fun `unchanged amps are not resent every tick`() = runTest {
+        val svc = mockk<OcppService>()
+        every { svc.activeTransactionId("CP1", 1) } returns 7
+        every { svc.isPowerControlCapable("CP1") } returns true
+        coEvery { svc.setChargingProfile("CP1", 1, any(), any()) } returns true
+        val charger = OcppCharger("CP1", 1, svc)
+
+        charger.apply(ChargerCommand.Charge(Ampere(16)))
+        charger.apply(ChargerCommand.Charge(Ampere(16)))
+
+        coVerify(exactly = 1) { svc.setChargingProfile("CP1", 1, 16.0, ChargingRateUnitType.A) }
+    }
+
+    @Test
+    fun `changed amps are sent immediately`() = runTest {
+        val svc = mockk<OcppService>()
+        every { svc.activeTransactionId("CP1", 1) } returns 7
+        every { svc.isPowerControlCapable("CP1") } returns true
+        coEvery { svc.setChargingProfile("CP1", 1, any(), any()) } returns true
+        val charger = OcppCharger("CP1", 1, svc)
+
+        charger.apply(ChargerCommand.Charge(Ampere(16)))
+        charger.apply(ChargerCommand.Charge(Ampere(10)))
+
+        coVerify(exactly = 1) { svc.setChargingProfile("CP1", 1, 16.0, ChargingRateUnitType.A) }
+        coVerify(exactly = 1) { svc.setChargingProfile("CP1", 1, 10.0, ChargingRateUnitType.A) }
+    }
+
+    @Test
+    fun `rejected profile is retried on the next tick`() = runTest {
+        val svc = mockk<OcppService>()
+        every { svc.activeTransactionId("CP1", 1) } returns 7
+        every { svc.isPowerControlCapable("CP1") } returns true
+        coEvery { svc.setChargingProfile("CP1", 1, any(), any()) } returnsMany listOf(false, true)
+        val charger = OcppCharger("CP1", 1, svc)
+
+        charger.apply(ChargerCommand.Charge(Ampere(16)))
+        charger.apply(ChargerCommand.Charge(Ampere(16)))
+
+        coVerify(exactly = 2) { svc.setChargingProfile("CP1", 1, 16.0, ChargingRateUnitType.A) }
+    }
+
+    @Test
+    fun `rejected RemoteStart is not retried within the backoff window`() = runTest {
+        val svc = mockk<OcppService>()
+        every { svc.activeTransactionId("CP1", 1) } returns null
+        every { svc.connectorStatus("CP1", 1) } returns ChargePointStatus.Preparing
+        every { svc.isPowerControlCapable("CP1") } returns true
+        coEvery { svc.remoteStart("CP1", "EMS", 1) } returns false
+        coEvery { svc.setChargingProfile("CP1", 1, any(), any()) } returns true
+        val charger = OcppCharger("CP1", 1, svc)
+
+        charger.apply(ChargerCommand.Charge(Ampere(16)))
+        charger.apply(ChargerCommand.Charge(Ampere(16))) // next 5 s tick, still inside 30 s backoff
+
+        coVerify(exactly = 1) { svc.remoteStart("CP1", "EMS", 1) }
+    }
+
+    @Test
+    fun `no RemoteStart on an Unknown (faulted) connector`() = runTest {
+        val svc = mockk<OcppService>()
+        every { svc.activeTransactionId("CP1", 1) } returns null
+        every { svc.connectorStatus("CP1", 1) } returns ChargePointStatus.Faulted
+        every { svc.isPowerControlCapable("CP1") } returns true
+        coEvery { svc.setChargingProfile("CP1", 1, any(), any()) } returns true
+        val charger = OcppCharger("CP1", 1, svc)
+
+        charger.apply(ChargerCommand.Charge(Ampere(16)))
+
+        coVerify(exactly = 0) { svc.remoteStart(any(), any(), any()) }
+    }
+
+    @Test
     fun `Stop stops the active transaction and sends no profile`() = runTest {
         val svc = mockk<OcppService>()
         every { svc.activeTransactionId("CP1", 1) } returns 42

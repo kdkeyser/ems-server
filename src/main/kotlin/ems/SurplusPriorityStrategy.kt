@@ -8,6 +8,8 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 
+private const val VOLTAGE = 230 // single-phase installation; the only amps<->watts site
+
 /**
  * Surplus cascade: heat pump -> charger -> battery.
  *
@@ -23,6 +25,14 @@ import kotlin.math.roundToInt
  * [gridDeadbandW] ignores imbalances below meter/control noise so the battery doesn't chase a few
  * watts back and forth.
  *
+ * Solar charging sessions are hysteresis-gated. Without it the min-amps floor means a plugged-in
+ * car in solar mode charges at 6 A forever — all night, drained from the home battery. A session
+ * opens only after `available >= chargerMinAmps * 230 V` has held for [startAfterTicks] consecutive
+ * ticks (~60 s), and closes only after `available < minW / 2` has held for [stopAfterTicks]
+ * consecutive ticks (~5 min) — so passing clouds don't chatter the car's contactor. While a session
+ * is active the current tracks the surplus but never drops below the minimum (a car won't charge
+ * below it; the shortfall is imported and the battery covers it first).
+ *
  * NOTE: the deadbeat cancellation is only exact when grid and battery are sampled simultaneously and
  * report instantly. They are not — the SMA smooths its reported power, and grid (P1/HTTP) and
  * battery (Modbus) are polled on independent loops — so on fast ramps the loop can still briefly
@@ -32,7 +42,13 @@ import kotlin.math.roundToInt
 class SurplusPriorityStrategy(
     private val gain: Double = 1.0,
     private val gridDeadbandW: Int = 50,
+    private val startAfterTicks: Int = 12, // ~60 s at 5 s cadence
+    private val stopAfterTicks: Int = 60,  // ~5 min at 5 s cadence
 ) : Strategy {
+
+    private var sessionActive = false
+    private var startTicks = 0
+    private var stopTicks = 0
 
     override fun decide(snapshot: WorldSnapshot): ControlDecisions {
         // Available power = what charger + battery currently use, minus any grid import (or plus export).
@@ -47,15 +63,18 @@ class SurplusPriorityStrategy(
             ConsumeMode.SuggestConsumeUpTo(Watt(headroom))
         }
 
-        // Car charger: forced override (Stop/Fixed) wins; otherwise assign the available surplus.
-        // During an active solar session (override == null) never drop below the minimum — a car won't
-        // charge below it, so dropping to 0 just chatters the relays. The shortfall is imported (the
-        // battery, balancing the measured grid, covers it first).
-        val chargerCommand: ChargerCommand = snapshot.chargerOverride
-            ?: run {
-                val amps = (available / 230).coerceIn(snapshot.chargerMinAmps, snapshot.chargerMaxAmps)
-                ChargerCommand.Charge(Ampere(amps))
-            }
+        val override = snapshot.chargerOverride
+        val chargerCommand: ChargerCommand = if (override != null) {
+            // Forced command (Stop / Fixed): sync the session flag so a later switch back to
+            // solar starts from reality — unplug resets it, an open fixed session continues.
+            sessionActive = override is ChargerCommand.Charge
+            startTicks = 0
+            stopTicks = 0
+            override
+        } else {
+            solarSessionCommand(available, snapshot.chargerMinAmps, snapshot.chargerMaxAmps)
+        }
+
         // Battery balances the MEASURED grid, not the charger setpoint: the charger's real draw —
         // whatever the car actually takes — already shows up in gridPower. Feeding the commanded
         // setpoint forward instead parked the grid in steady-state export whenever the car drew less
@@ -67,6 +86,31 @@ class SurplusPriorityStrategy(
             batteryCommand = BatteryCommand.SetPower(batteryTarget),
             heatpumpConsumeMode = heatpumpMode
         )
+    }
+
+    /**
+     * Charger command for an unforced (solar) tick: hysteresis-gated session start/stop, and while
+     * a session is active, the surplus mapped to amps with the min floor applied (see class KDoc).
+     */
+    private fun solarSessionCommand(available: Int, minAmps: Int, maxAmps: Int): ChargerCommand {
+        val minW = minAmps * VOLTAGE
+        if (!sessionActive) {
+            startTicks = if (available >= minW) startTicks + 1 else 0
+            if (startTicks >= startAfterTicks) {
+                sessionActive = true
+                startTicks = 0
+                stopTicks = 0
+            }
+        } else {
+            stopTicks = if (available < minW / 2) stopTicks + 1 else 0
+            if (stopTicks >= stopAfterTicks) {
+                sessionActive = false
+                startTicks = 0
+                stopTicks = 0
+            }
+        }
+        if (!sessionActive) return ChargerCommand.Stop
+        return ChargerCommand.Charge(Ampere((available / VOLTAGE).coerceIn(minAmps, maxAmps)))
     }
 
     override fun decideDegraded(gridPower: Watt, batteryPower: Watt): Watt =

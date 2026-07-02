@@ -27,7 +27,8 @@ private data class ErrorBody(val message: String)
  * Designed as a standalone API (automation-friendly), not just for the page: the whole document is
  * editable via `PUT /api/config`, with convenience sub-resources for grid, individual devices and
  * settings. Every mutation is validated and, in `database` mode, persisted; in `file` mode mutations
- * are rejected (409). Changes take effect on the next restart (hot-reload is a later phase).
+ * are rejected (409). A successful mutation in `database` mode hot-reloads the live device graph
+ * (Phase 3): `ConfigService.update` publishes on `configFlow`, which rebuilds and swaps the `World`.
  */
 fun Application.configureConfigApi(configService: ConfigService) {
     val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }

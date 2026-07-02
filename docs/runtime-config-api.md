@@ -1,7 +1,9 @@
 # Runtime device & settings configuration (DB-backed) + config API
 
-**Status:** Phases 1–3 implemented (2026-06-14). Phase 3 (live hot-reload) is code-complete
-and unit-tested but **not yet hardware-verified** (the battery 803 hand-back on swap).
+**Status:** Phases 1–3 + schema-driven forms implemented and **merged to `main`** (2026-07-02).
+Phase 3 (live hot-reload) is code-complete and unit-tested but **not yet hardware-verified** —
+the battery 803 hand-back on device-graph swap, and re-IP/retype reconnect, still need a real
+hardware run before relying on a live reload in production.
 
 ## Goal
 

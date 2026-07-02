@@ -10,7 +10,8 @@ sealed class DeviceHealth {
     data class Online(
         val lastSeenAt: Long,
         val powerW: Int,
-        val extraInfo: String? = null
+        val extraInfo: String? = null,
+        val batterySoc: Int? = null,
     ) : DeviceHealth()
 
     @Serializable

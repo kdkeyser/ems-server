@@ -75,6 +75,7 @@ All `power: Int` fields in `EMSState` and `Update` use: **negative = producing/e
   going blind for ~30s, and on graceful shutdown. The inverter's own watchdog is too slow
   (≥15 min) to rely on for crash recovery.
 - **DataCollector**: runs on a fixed-size thread pool (`config.refreshThreads`, default 50). Modbus calls are blocking; they run on `Dispatchers.IO`.
+- **Solar charging sessions**: `SurplusPriorityStrategy` gates session start/stop with hysteresis — start after ~60 s of surplus ≥ min current (6 A × 230 V), stop after ~5 min of sustained deficit (< half the min). A plugged-in car in SOLAR mode does not charge at the min floor all night.
 
 ## Build & Run
 

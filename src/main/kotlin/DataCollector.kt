@@ -59,8 +59,9 @@ class DataCollector(
                 jobs.add(async { poll("battery", "battery") {
                     battery.update()
                     val state = battery.getState() ?: throw Exception("battery returned no data")
+                    val soc = state.update.charge.toInt()
                     DeviceHealth.Online(System.currentTimeMillis(), state.update.power.value,
-                        "${state.update.charge.toInt()}% SoC")
+                        "$soc% SoC", batterySoc = soc)
                 }})
             }
             world.heatPump?.let { consumer ->
@@ -80,7 +81,7 @@ class DataCollector(
                 ?.sum()
             val batteryOnline = if (world.battery != null) healthMap["battery"] as? DeviceHealth.Online else null
             val batteryW = batteryOnline?.powerW
-            val batteryCharge = batteryOnline?.extraInfo?.removeSuffix("% SoC")?.toIntOrNull()
+            val batteryCharge = batteryOnline?.batterySoc
             val chargerOnline = if (world.charger != null) healthMap["charger"] as? DeviceHealth.Online else null
             val chargerW = chargerOnline?.powerW
             val chargerConnection = chargerOnline?.extraInfo

@@ -35,11 +35,17 @@ class SurplusPriorityStrategyTest {
         chargerOverride = chargerOverride
     )
 
+    /** A strategy whose solar session is already active (surplus held for the whole start window). */
+    private fun activeSessionStrategy(stopAfterTicks: Int = 60): SurplusPriorityStrategy =
+        SurplusPriorityStrategy(startAfterTicks = 1, stopAfterTicks = stopAfterTicks).also {
+            it.decide(snapshot(gridPower = -5000))
+        }
+
     @Test
     fun `large solar surplus — charger gets max amps, battery absorbs the measured export`() {
         // Exporting 2000W, charger at 2000W. available = 4000W -> 17A (3910W) for the charger.
         // Battery balances the MEASURED grid: target = batteryPower - gridPower = 0 - (-2000) = +2000W.
-        val decisions = strategy.decide(snapshot(gridPower = -2000, chargerPower = 2000))
+        val decisions = activeSessionStrategy().decide(snapshot(gridPower = -2000, chargerPower = 2000))
         assertEquals(ChargerCommand.Charge(Ampere(17)), decisions.chargerCommand)
         assertEquals(BatteryCommand.SetPower(Watt(2000)), decisions.batteryCommand)
         assertTrue(decisions.heatpumpConsumeMode is ConsumeMode.Unrestricted)
@@ -49,7 +55,7 @@ class SurplusPriorityStrategyTest {
     fun `importing from grid — charger reduces and battery covers the measured import`() {
         // Importing 500W, charger at 3000W. available = 2500W -> 10A (2300W) for the charger.
         // Battery balances the MEASURED grid: target = 0 - 500 = -500W (discharge to cover the import).
-        val decisions = strategy.decide(snapshot(gridPower = 500, chargerPower = 3000))
+        val decisions = activeSessionStrategy().decide(snapshot(gridPower = 500, chargerPower = 3000))
         assertEquals(ChargerCommand.Charge(Ampere(10)), decisions.chargerCommand)
         assertEquals(BatteryCommand.SetPower(Watt(-500)), decisions.batteryCommand)
     }
@@ -58,7 +64,7 @@ class SurplusPriorityStrategyTest {
     fun `surplus below charger minimum — charger held at minimum during the session`() {
         // Exporting 200W. 200/230 < 6A, but an active solar session floors the charger at its 6A minimum
         // (the difference is imported). Battery balances the measured grid: 0 - (-200) = +200W.
-        val decisions = strategy.decide(snapshot(gridPower = -200, chargerPower = 0, chargerMinAmps = 6))
+        val decisions = activeSessionStrategy().decide(snapshot(gridPower = -200, chargerPower = 0, chargerMinAmps = 6))
         assertEquals(ChargerCommand.Charge(Ampere(6)), decisions.chargerCommand)
         assertEquals(BatteryCommand.SetPower(Watt(200)), decisions.batteryCommand)
     }
@@ -67,7 +73,7 @@ class SurplusPriorityStrategyTest {
     fun `zero solar and importing — charger held at minimum, battery covers the measured deficit`() {
         // Importing 1500W, no solar. The active solar session still holds the charger at 6A min.
         // Battery balances the measured grid: 0 - 1500 = -1500W (discharge).
-        val decisions = strategy.decide(snapshot(gridPower = 1500, chargerPower = 0))
+        val decisions = activeSessionStrategy().decide(snapshot(gridPower = 1500, chargerPower = 0))
         assertEquals(ChargerCommand.Charge(Ampere(6)), decisions.chargerCommand)
         assertEquals(BatteryCommand.SetPower(Watt(-1500)), decisions.batteryCommand)
     }
@@ -76,7 +82,7 @@ class SurplusPriorityStrategyTest {
     fun `charger surplus clamped to max amps`() {
         // Exporting 10000W, charger at 6000W. available = 16000W -> clamped 32A (7360W) for the charger.
         // Battery balances the MEASURED grid: target = 0 - (-10000) = +10000W.
-        val decisions = strategy.decide(snapshot(gridPower = -10000, chargerPower = 6000, chargerMaxAmps = 32))
+        val decisions = activeSessionStrategy().decide(snapshot(gridPower = -10000, chargerPower = 6000, chargerMaxAmps = 32))
         assertEquals(ChargerCommand.Charge(Ampere(32)), decisions.chargerCommand)
         assertEquals(BatteryCommand.SetPower(Watt(10000)), decisions.batteryCommand)
     }
@@ -99,7 +105,7 @@ class SurplusPriorityStrategyTest {
     fun `holds current battery power when the grid is balanced within the deadband`() {
         // Battery already charging 500W; measured grid only 40W off -> within the 50W deadband -> hold 500W.
         // Surplus maps to 2A < 6A, but the active solar session floors the charger at 6A min.
-        val decisions = strategy.decide(snapshot(gridPower = -40, chargerPower = 0, batteryPower = 500))
+        val decisions = activeSessionStrategy().decide(snapshot(gridPower = -40, chargerPower = 0, batteryPower = 500))
         assertEquals(ChargerCommand.Charge(Ampere(6)), decisions.chargerCommand)
         assertEquals(BatteryCommand.SetPower(Watt(500)), decisions.batteryCommand)
     }
@@ -108,7 +114,7 @@ class SurplusPriorityStrategyTest {
     fun `no surplus during an active solar session still holds the charger at minimum`() {
         // Grid balanced (no surplus, no import). The surplus path (active solar session) still floors
         // the charger at its minimum rather than dropping to 0 — preventing on/off relay chatter.
-        val decisions = strategy.decide(snapshot(gridPower = 0, chargerPower = 0, chargerMinAmps = 6))
+        val decisions = activeSessionStrategy().decide(snapshot(gridPower = 0, chargerPower = 0, chargerMinAmps = 6))
         assertEquals(ChargerCommand.Charge(Ampere(6)), decisions.chargerCommand)
     }
 
@@ -173,5 +179,58 @@ class SurplusPriorityStrategyTest {
     fun `charger override Stop stops the charger regardless of surplus`() {
         val d = strategy.decide(snapshot(gridPower = -5000, chargerPower = 0, chargerOverride = ChargerCommand.Stop))
         assertEquals(ChargerCommand.Stop, d.chargerCommand)
+    }
+
+    @Test
+    fun `solar session does not start without sustained surplus`() {
+        val s = SurplusPriorityStrategy(startAfterTicks = 3)
+        // available = 2000 W >= 6 A * 230 V = 1380 W, but never 3 ticks in a row.
+        assertEquals(ChargerCommand.Stop, s.decide(snapshot(gridPower = -2000)).chargerCommand)
+        assertEquals(ChargerCommand.Stop, s.decide(snapshot(gridPower = -2000)).chargerCommand)
+        assertEquals(ChargerCommand.Stop, s.decide(snapshot(gridPower = 0)).chargerCommand) // lull resets
+        assertEquals(ChargerCommand.Stop, s.decide(snapshot(gridPower = -2000)).chargerCommand)
+    }
+
+    @Test
+    fun `solar session starts after sustained surplus`() {
+        val s = SurplusPriorityStrategy(startAfterTicks = 3)
+        repeat(2) { assertEquals(ChargerCommand.Stop, s.decide(snapshot(gridPower = -2000)).chargerCommand) }
+        // Third consecutive surplus tick opens the session: 2000/230 = 8 A.
+        assertEquals(ChargerCommand.Charge(Ampere(8)), s.decide(snapshot(gridPower = -2000)).chargerCommand)
+    }
+
+    @Test
+    fun `solar session stops only after a sustained deficit`() {
+        val s = activeSessionStrategy(stopAfterTicks = 3)
+        // available = 0 < 690 W (minW/2): two deficit ticks still hold the 6 A floor.
+        repeat(2) { assertEquals(ChargerCommand.Charge(Ampere(6)), s.decide(snapshot(gridPower = 0)).chargerCommand) }
+        // Third consecutive deficit tick closes the session.
+        assertEquals(ChargerCommand.Stop, s.decide(snapshot(gridPower = 0)).chargerCommand)
+    }
+
+    @Test
+    fun `brief cloud dip does not stop the session`() {
+        val s = activeSessionStrategy(stopAfterTicks = 3)
+        s.decide(snapshot(gridPower = 0)) // dip tick 1
+        s.decide(snapshot(gridPower = 0)) // dip tick 2
+        // Sun returns before the stop window elapses: counter resets, session continues.
+        assertEquals(ChargerCommand.Charge(Ampere(8)), s.decide(snapshot(gridPower = -2000)).chargerCommand)
+        assertEquals(ChargerCommand.Charge(Ampere(6)), s.decide(snapshot(gridPower = 0)).chargerCommand)
+    }
+
+    @Test
+    fun `Stop override resets the solar session`() {
+        val s = activeSessionStrategy()
+        s.decide(snapshot(gridPower = -5000, chargerOverride = ChargerCommand.Stop)) // car unplugged / charging off
+        // Back in solar mode: the start window must be re-earned, not resumed at the floor.
+        assertEquals(ChargerCommand.Stop, s.decide(snapshot(gridPower = 0)).chargerCommand)
+    }
+
+    @Test
+    fun `Charge override marks the session active so solar resumes without the start window`() {
+        val s = SurplusPriorityStrategy(startAfterTicks = 12, stopAfterTicks = 60)
+        s.decide(snapshot(gridPower = 0, chargerOverride = ChargerCommand.Charge(Ampere(10)))) // FIXED mode tick
+        // Switch to solar: the open session continues at the floor instead of stopping for a minute.
+        assertEquals(ChargerCommand.Charge(Ampere(6)), s.decide(snapshot(gridPower = 0)).chargerCommand)
     }
 }

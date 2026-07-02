@@ -265,18 +265,15 @@ async function addTag() {
   $('newTag').value=''; refreshTags();
 }
 async function delTag(idTag) { await api('/idtags/' + encodeURIComponent(idTag), { method:'DELETE' }); refreshTags(); }
+// Start/Stop set the EMS charging intent; the control loop opens/closes the OCPP
+// transaction on its next tick (a direct command would be overridden within seconds).
 async function startTx(id) {
-  const entry = cards[id]; if (!entry) return;
-  const idTag = prompt('idTag to start with?'); if (!idTag) return;
-  const connectorId = parseInt(entry.refs.connInput.value, 10) || 1;
-  const r = await api('/chargepoints/' + id + '/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({idTag, connectorId}) });
-  if (!r.ok) alert('Start failed — charger rejected (check the idTag / connector) or offline.');
+  const r = await api('/chargepoints/' + id + '/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: '{}' });
+  if (!r.ok) alert('Start failed.');
 }
 async function stopTx(id) {
-  const entry = cards[id];
-  if (!entry || entry.activeTx == null) { alert('No active transaction to stop.'); return; }
-  const r = await api('/chargepoints/' + id + '/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({transactionId: entry.activeTx}) });
-  if (!r.ok) alert('Stop failed — charger rejected or offline.');
+  const r = await api('/chargepoints/' + id + '/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body: '{}' });
+  if (!r.ok) alert('Stop failed.');
 }
 async function resetCp(id) {
   await api('/chargepoints/' + id + '/reset', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type:'Soft'}) });

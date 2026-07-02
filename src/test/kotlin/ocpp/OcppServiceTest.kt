@@ -7,6 +7,7 @@ import io.mockk.*
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.exposed.sql.Database
 import kotlin.test.*
+import kotlin.time.Duration.Companion.seconds
 
 class OcppServiceTest {
 
@@ -172,6 +173,59 @@ class OcppServiceTest {
             "CP1", StartTransactionRequest(connectorId = 1, idTag = "EMS", meterStart = 0, timestamp = "2026-06-10T00:00:00Z"),
         )
         assertTrue(resp.transactionId > 500, "expected id > 500, got ${resp.transactionId}")
+    }
+
+    @Test
+    fun `meterValues power readings carry a timestamp`() = runTest {
+        val svc = newService()
+        svc.registerSession("CP1", mockk(relaxed = true))
+        svc.handleMeterValues("CP1", MeterValuesRequest(connectorId = 1, meterValue = listOf(
+            MeterValue("t", listOf(SampledValue(value = "2300", measurand = Measurand.PowerActiveImport, unit = UnitOfMeasure.W))))))
+        val reading = svc.latestPowerReading("CP1", 1)
+        assertEquals(2300, reading?.watts)
+        assertTrue(reading!!.at.elapsedNow() < 5.seconds)
+    }
+
+    @Test
+    fun `rejected idTag does not open a live transaction`() = runTest {
+        val svc = newService(acceptTags = false) // unknown tags are rejected
+        svc.registerSession("CP1", mockk(relaxed = true))
+        val resp = svc.handleStartTransaction("CP1",
+            StartTransactionRequest(connectorId = 1, idTag = "UNKNOWN", meterStart = 0, timestamp = "2026-01-01T00:00:00Z"))
+        assertEquals(AuthorizationStatus.Invalid, resp.idTagInfo.status)
+        assertNull(svc.activeTransactionId("CP1", 1),
+            "a rejected transaction must not be tracked as charging")
+    }
+
+    @Test
+    fun `reconnect without BootNotification restores persisted capabilities`() = runTest {
+        val db = freshTestDb()
+        val svcA = newServiceOn(db)
+        svcA.registerSession("CP1", mockk(relaxed = true))
+        svcA.handleBootNotification("CP1", BootNotificationRequest("Acme", "X1"))
+        svcA.applyCapabilityProbe("CP1", GetConfigurationResponse(
+            configurationKey = listOf(ConfigurationKey("SupportedFeatureProfiles", true, "Core,SmartCharging"))))
+        assertTrue(svcA.isPowerControlCapable("CP1"))
+
+        // Server restart: the charger reconnects but sends no BootNotification
+        // (OCPP 1.6 only requires one per charger reboot).
+        val svcB = newServiceOn(db)
+        svcB.registerSession("CP1", mockk(relaxed = true))
+        assertTrue(svcB.isPowerControlCapable("CP1"),
+            "SmartCharging capability must survive a reconnect without boot")
+    }
+
+    @Test
+    fun `stale connection close does not evict a newer session`() = runTest {
+        val svc = newService()
+        val oldWs = mockk<DefaultWebSocketSession>(relaxed = true)
+        val newWs = mockk<DefaultWebSocketSession>(relaxed = true)
+        svc.registerSession("CP1", oldWs)
+        svc.registerSession("CP1", newWs)   // charger reconnected while the old socket lingers
+        svc.unregisterSession("CP1", oldWs) // the old connection finally times out
+        assertNotNull(svc.getSession("CP1"), "live session must survive the stale close")
+        svc.unregisterSession("CP1", newWs)
+        assertNull(svc.getSession("CP1"))
     }
 
     @Test

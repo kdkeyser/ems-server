@@ -1,6 +1,7 @@
 package io.konektis.ocpp
 
 import io.klogging.Klogging
+import io.konektis.GlobalTimeSource
 import io.konektis.config.OcppConfig
 import io.konektis.ocpp.db.*
 import io.ktor.websocket.*
@@ -22,16 +23,20 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration.Companion.seconds
 
 // ---- Live (in-memory) state ----
+
+/** A power sample plus the monotonic moment it arrived, for staleness checks. */
+data class PowerReading(val watts: Int, val at: ComparableTimeMark)
 
 class ConnectorState(
     val connectorId: Int,
     var status: ChargePointStatus = ChargePointStatus.Available,
     var errorCode: ChargePointErrorCode = ChargePointErrorCode.NoError,
     var currentTransactionId: Int? = null,
-    var lastPowerW: Int? = null,
+    var lastPower: PowerReading? = null,
 )
 
 class ChargePointSession(
@@ -97,13 +102,32 @@ class OcppService(
     fun getSession(id: String): ChargePointSession? = sessions[id]
 
     suspend fun registerSession(chargePointId: String, session: DefaultWebSocketSession) {
-        sessions[chargePointId] = ChargePointSession(chargePointId, session)
+        // Restore persisted facts: a charge point reconnecting without a fresh BootNotification
+        // (OCPP only requires one per reboot) must not lose its SmartCharging capability — the
+        // EMS would keep opening transactions but silently stop sending charging profiles.
+        val persisted = chargePoints.get(chargePointId)
+        sessions[chargePointId] = ChargePointSession(chargePointId, session).apply {
+            if (persisted != null) {
+                vendor = persisted.vendor
+                model = persisted.model
+                smartChargingSupported = persisted.smartChargingSupported
+                powerImportSeen = persisted.powerImportSeen
+            }
+        }
         logger.info("Registered charge point $chargePointId")
         recomputeState()
     }
 
-    suspend fun unregisterSession(chargePointId: String) {
-        sessions.remove(chargePointId)
+    suspend fun unregisterSession(chargePointId: String, session: DefaultWebSocketSession) {
+        // Only evict the session this connection registered: on a quick reconnect the new
+        // connection has already replaced the map entry, and the old handler's close must
+        // not remove it — that would leave a connected charger invisible to the EMS.
+        val current = sessions[chargePointId]
+        if (current?.session !== session) {
+            logger.info("Ignoring close of a superseded connection for $chargePointId")
+            return
+        }
+        sessions.remove(chargePointId, current)
         logger.info("Unregistered charge point $chargePointId")
         recomputeState()
     }
@@ -147,16 +171,21 @@ class OcppService(
 
     suspend fun handleStartTransaction(chargePointId: String, request: StartTransactionRequest): StartTransactionResponse {
         val transactionId = transactionIdCounter.getAndIncrement()
-        sessions[chargePointId]?.let { s ->
-            s.activeTransactions[transactionId] =
-                ActiveTransaction(transactionId, request.connectorId, request.idTag, Instant.now(), request.meterStart)
-            s.connectors.getOrPut(request.connectorId) { ConnectorState(request.connectorId) }.apply {
-                currentTransactionId = transactionId
-                status = ChargePointStatus.Charging
+        val auth = authorizeTag(request.idTag)
+        // Per OCPP 1.6 a transactionId is always returned, but a non-Accepted idTagInfo means the
+        // charge point must not deliver energy — so don't track it as a live charging session either.
+        if (auth == AuthorizationStatus.Accepted) {
+            sessions[chargePointId]?.let { s ->
+                s.activeTransactions[transactionId] =
+                    ActiveTransaction(transactionId, request.connectorId, request.idTag, Instant.now(), request.meterStart)
+                s.connectors.getOrPut(request.connectorId) { ConnectorState(request.connectorId) }.apply {
+                    currentTransactionId = transactionId
+                    status = ChargePointStatus.Charging
+                }
             }
+            recomputeState()
         }
-        recomputeState()
-        return StartTransactionResponse(transactionId, IdTagInfo(status = authorizeTag(request.idTag)))
+        return StartTransactionResponse(transactionId, IdTagInfo(status = auth))
     }
 
     suspend fun handleStopTransaction(chargePointId: String, request: StopTransactionRequest): StopTransactionResponse {
@@ -207,7 +236,7 @@ class OcppService(
 
         val powerW = extractActivePowerW(request)
         if (powerW != null) {
-            connector?.lastPowerW = powerW
+            connector?.lastPower = PowerReading(powerW, GlobalTimeSource.source.markNow())
             if (s != null && !s.powerImportSeen) {
                 s.powerImportSeen = true
                 chargePoints.setPowerImportSeen(chargePointId, true)
@@ -236,7 +265,11 @@ class OcppService(
 
     /** Latest active-power reading (W) for a connector, or null until one arrives. */
     fun latestPowerW(chargePointId: String, connectorId: Int): Int? =
-        sessions[chargePointId]?.connectors?.get(connectorId)?.lastPowerW
+        latestPowerReading(chargePointId, connectorId)?.watts
+
+    /** Latest active-power reading with its arrival time, for staleness checks. */
+    fun latestPowerReading(chargePointId: String, connectorId: Int): PowerReading? =
+        sessions[chargePointId]?.connectors?.get(connectorId)?.lastPower
 
     /** Latest known OCPP connector status, or null if the charge point/connector is unknown. */
     fun connectorStatus(chargePointId: String, connectorId: Int): ChargePointStatus? =
@@ -293,7 +326,7 @@ class OcppService(
                     smartChargingSupported = s.smartChargingSupported,
                     powerReadable = s.powerImportSeen,
                     connectors = s.connectors.values.map { c ->
-                        OcppConnectorView(c.connectorId, c.status.name, c.lastPowerW, c.currentTransactionId)
+                        OcppConnectorView(c.connectorId, c.status.name, c.lastPower?.watts, c.currentTransactionId)
                     }.sortedBy { it.connectorId },
                 )
             }.sortedBy { it.chargePointId },

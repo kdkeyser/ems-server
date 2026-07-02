@@ -141,8 +141,15 @@ Each connected charger has two settings on `/ocpp-ui` (persisted in SQLite):
 2. The charger pushes `MeterValues`; the server records the live power.
 3. The EMS control loop runs `SurplusPriorityStrategy` every 5 s and, if the charger is
    SmartCharging-capable and EMS-auto is on, sends a `SetChargingProfile` to cap the current to the
-   available solar surplus (clamped to `[min, max]` amps and the per-charger Max A).
-4. You can also drive the charger manually from `/ocpp-ui` (Start / Stop / Reset).
+   available solar surplus (clamped to `[min, max]` amps and the per-charger Max A). Identical
+   limits are not re-sent every tick — only on change, plus a refresh every ~60 s.
+4. In solar mode, sessions are hysteresis-gated: charging starts only after the surplus has covered
+   the charger minimum (`min` amps × 230 V) for ~60 s, and stops after ~5 min of sustained deficit
+   (below half the minimum). While a session runs, the current never drops below `min` — the
+   shortfall is imported briefly rather than chattering the car's contactor.
+5. The **Start / Stop** buttons and the manual current field on `/ocpp-ui` set the same persisted
+   charging intent the app uses (the control loop enacts them on its next tick); **Reset** and
+   **Clear profile** talk to the charger directly.
 
 ## 8. Troubleshooting
 

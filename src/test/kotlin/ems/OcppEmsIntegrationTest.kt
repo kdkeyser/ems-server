@@ -16,6 +16,7 @@ import io.konektis.devices.smartConsumers.SmartConsumer
 import io.konektis.devices.smartConsumers.SmartConsumerState
 import io.konektis.ocpp.ChargingRateUnitType
 import io.konektis.ocpp.OcppService
+import io.konektis.ocpp.PowerReading
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
@@ -26,7 +27,8 @@ class OcppEmsIntegrationTest {
     fun surplusDrivesSetChargingProfileOnOcppCharger() = runTest {
         val svc = mockk<OcppService>()
         every { svc.isPowerControlCapable("CP1") } returns true
-        every { svc.latestPowerW("CP1", 1) } returns 0   // charger currently drawing 0 W
+        every { svc.latestPowerReading("CP1", 1) } returns
+            PowerReading(0, GlobalTimeSource.source.markNow()) // charger currently drawing 0 W
         every { svc.connectorStatus("CP1", 1) } returns null
         every { svc.activeTransactionId("CP1", 1) } returns 99 // session already open: just throttle it
         coEvery { svc.setChargingProfile("CP1", 1, any(), any()) } returns true
@@ -51,8 +53,10 @@ class OcppEmsIntegrationTest {
             heatPump = heatpump,
             battery = battery,
         )
-        // config.yaml's first charger entry bounds amps to [6, 32].
-        val manager = EnergyManager(world, loadConfig("/config.yaml"), SurplusPriorityStrategy(), FakeChargerControlStore())
+        // config.yaml's first charger entry bounds amps to [6, 32]. startAfterTicks = 1 lets the
+        // solar session open on the first surplus tick (production needs ~60 s of sustained surplus).
+        val manager = EnergyManager(world, loadConfig("/config.yaml"),
+            SurplusPriorityStrategy(startAfterTicks = 1), FakeChargerControlStore())
 
         manager.tick()
 

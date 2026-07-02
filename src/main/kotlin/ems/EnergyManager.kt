@@ -65,8 +65,8 @@ class EnergyManager(
     /** Latest car SoC (%) for the socket to push; a constant null flow when CarData is disabled. */
     val carSocFlow: StateFlow<Int?> = carDataService?.socFlow ?: MutableStateFlow<Int?>(null)
 
-    private val chargerKey: String? =
-        config.devices.charger.firstOrNull()?.let { it.chargePointId ?: it.name }
+    private val chargerKey: String?
+        get() = config.devices.charger.firstOrNull()?.let { it.chargePointId ?: it.name }
 
     private fun defaultControl() =
         ChargerControl(ChargerMode.SOLAR, config.devices.charger.firstOrNull()?.chargingCurrent?.max?.toInt() ?: 16, true)
@@ -133,6 +133,9 @@ class EnergyManager(
                     world.battery?.let { battery ->
                         runCatchingLog("release battery") { battery.releaseToInverter() }
                     }
+                    // A solar-mode charger (override == null) would otherwise keep its last commanded
+                    // current indefinitely — with no grid data the surplus is unknowable, so stop it.
+                    if (override == null) applyChargerCommand(ChargerCommand.Stop)
                 }
                 // Stop/Fixed are still enforced without surplus data; solar surplus (null) is left as-is.
                 override?.let { applyChargerCommand(it) }

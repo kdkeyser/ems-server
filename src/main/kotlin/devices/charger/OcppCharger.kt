@@ -7,6 +7,8 @@ import io.konektis.devices.Watt
 import io.konektis.ocpp.ChargePointStatus
 import io.konektis.ocpp.ChargingRateUnitType
 import io.konektis.ocpp.OcppService
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /** Maps an OCPP connector status to the app-facing ChargerConnection. */
 internal fun chargerConnectionFrom(status: ChargePointStatus?): ChargerConnection = when (status) {
@@ -37,6 +39,7 @@ class OcppCharger(
     private val connectorId: Int,
     private val service: OcppService,
     private val idTag: String = OcppService.EMS_ID_TAG,
+    private val meterStaleAfter: Duration = 90.seconds,
 ) : Charger, Klogging {
 
     override suspend fun update() {
@@ -44,19 +47,23 @@ class OcppCharger(
     }
 
     override suspend fun getState(): DeviceUpdate<ChargerState>? {
-        val rawPowerW = service.latestPowerW(chargePointId, connectorId)
+        val reading = service.latestPowerReading(chargePointId, connectorId)
         val connection = chargerConnectionFrom(service.connectorStatus(chargePointId, connectorId))
         // Return a state when we know either the power or the connection; only bail when both are absent
         // (so a connected-but-idle car still surfaces before any MeterValue arrives).
-        if (rawPowerW == null && connection == ChargerConnection.Unknown) return null
-        // The charger only pushes MeterValues during an open transaction, so latestPowerW goes stale the
-        // moment a session ends. With no transaction the charger draws nothing — report 0 W instead of the
-        // last seen value, which would otherwise linger on the app's main screen after charging stops.
-        val powerW = if (service.activeTransactionId(chargePointId, connectorId) != null) rawPowerW ?: 0 else 0
-        return DeviceUpdate(
-            GlobalTimeSource.source.markNow(),
-            ChargerState(Watt(powerW), connection)
-        )
+        if (reading == null && connection == ChargerConnection.Unknown) return null
+        val txActive = service.activeTransactionId(chargePointId, connectorId) != null
+        return when {
+            // No transaction: the charger draws nothing; a leftover reading from the previous
+            // session must not linger on the app's main screen.
+            !txActive -> DeviceUpdate(GlobalTimeSource.source.markNow(), ChargerState(Watt(0), connection))
+            // Transaction just opened, no MeterValue yet: report 0 W rather than nothing.
+            reading == null -> DeviceUpdate(GlobalTimeSource.source.markNow(), ChargerState(Watt(0), connection))
+            // MeterValues stopped flowing mid-transaction (charger hiccup): the last value is
+            // NOT current draw. Report unreadable so the EMS degrades instead of steering on it.
+            reading.at.elapsedNow() > meterStaleAfter -> null
+            else -> DeviceUpdate(GlobalTimeSource.source.markNow(), ChargerState(Watt(reading.watts), connection))
+        }
     }
 
     override suspend fun apply(cmd: ChargerCommand) {

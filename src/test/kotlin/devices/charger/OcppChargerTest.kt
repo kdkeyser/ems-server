@@ -1,20 +1,24 @@
 package io.konektis.devices.charger
 
+import io.konektis.GlobalTimeSource
 import io.konektis.devices.Ampere
 import io.konektis.devices.Watt
 import io.konektis.ocpp.ChargePointStatus
 import io.konektis.ocpp.ChargingRateUnitType
 import io.konektis.ocpp.OcppService
+import io.konektis.ocpp.PowerReading
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
+import kotlin.time.TestTimeSource
+import kotlin.time.Duration.Companion.seconds
 
 class OcppChargerTest {
 
     @Test
     fun getStateReturnsNullUntilPowerSeen() = runTest {
         val svc = mockk<OcppService>()
-        every { svc.latestPowerW("CP1", 1) } returns null
+        every { svc.latestPowerReading("CP1", 1) } returns null
         every { svc.connectorStatus("CP1", 1) } returns null
         val charger = OcppCharger("CP1", 1, svc)
         charger.update()
@@ -24,7 +28,7 @@ class OcppChargerTest {
     @Test
     fun getStateReflectsLatestPower() = runTest {
         val svc = mockk<OcppService>()
-        every { svc.latestPowerW("CP1", 1) } returns 2300
+        every { svc.latestPowerReading("CP1", 1) } returns PowerReading(2300, GlobalTimeSource.source.markNow())
         every { svc.connectorStatus("CP1", 1) } returns null
         every { svc.activeTransactionId("CP1", 1) } returns 99 // session open: live reading is trusted
         val charger = OcppCharger("CP1", 1, svc)
@@ -49,7 +53,7 @@ class OcppChargerTest {
     @Test
     fun `getState surfaces connection even with no power yet`() = runTest {
         val svc = mockk<OcppService>()
-        every { svc.latestPowerW("CP1", 1) } returns null
+        every { svc.latestPowerReading("CP1", 1) } returns null
         every { svc.connectorStatus("CP1", 1) } returns ChargePointStatus.Preparing
         every { svc.activeTransactionId("CP1", 1) } returns null
         val charger = OcppCharger("CP1", 1, svc)
@@ -62,7 +66,7 @@ class OcppChargerTest {
     @Test
     fun `getState reflects charging connection with power`() = runTest {
         val svc = mockk<OcppService>()
-        every { svc.latestPowerW("CP1", 1) } returns 7000
+        every { svc.latestPowerReading("CP1", 1) } returns PowerReading(7000, GlobalTimeSource.source.markNow())
         every { svc.connectorStatus("CP1", 1) } returns ChargePointStatus.Charging
         every { svc.activeTransactionId("CP1", 1) } returns 7 // session open: live reading is trusted
         val charger = OcppCharger("CP1", 1, svc)
@@ -75,13 +79,27 @@ class OcppChargerTest {
     @Test
     fun `getState reports zero power when no transaction is active even if a stale reading remains`() = runTest {
         val svc = mockk<OcppService>()
-        every { svc.latestPowerW("CP1", 1) } returns 7000 // stale value left over from the finished session
+        every { svc.latestPowerReading("CP1", 1) } returns PowerReading(7000, GlobalTimeSource.source.markNow()) // leftover from the finished session
         every { svc.connectorStatus("CP1", 1) } returns ChargePointStatus.Finishing
         every { svc.activeTransactionId("CP1", 1) } returns null // session ended: no open transaction
         val charger = OcppCharger("CP1", 1, svc)
         val state = charger.getState()
         assertEquals(0, state?.update?.currentPower?.value)
         assertEquals(ChargerConnection.Connected, state?.update?.connection)
+    }
+
+    @Test
+    fun `getState treats a frozen MeterValues reading as unreadable mid-transaction`() = runTest {
+        val ts = TestTimeSource()
+        val staleMark = ts.markNow()
+        ts += 120.seconds // older than the 90 s meter-staleness bound
+        val svc = mockk<OcppService>()
+        every { svc.latestPowerReading("CP1", 1) } returns PowerReading(7000, staleMark)
+        every { svc.connectorStatus("CP1", 1) } returns ChargePointStatus.Charging
+        every { svc.activeTransactionId("CP1", 1) } returns 7
+        val charger = OcppCharger("CP1", 1, svc)
+        assertNull(charger.getState(),
+            "a charger frozen mid-transaction must read as unreadable, not as the last value forever")
     }
 
     @Test

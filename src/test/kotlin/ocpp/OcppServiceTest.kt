@@ -7,6 +7,7 @@ import io.mockk.*
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.exposed.sql.Database
 import kotlin.test.*
+import kotlin.time.Duration.Companion.seconds
 
 class OcppServiceTest {
 
@@ -172,6 +173,17 @@ class OcppServiceTest {
             "CP1", StartTransactionRequest(connectorId = 1, idTag = "EMS", meterStart = 0, timestamp = "2026-06-10T00:00:00Z"),
         )
         assertTrue(resp.transactionId > 500, "expected id > 500, got ${resp.transactionId}")
+    }
+
+    @Test
+    fun `meterValues power readings carry a timestamp`() = runTest {
+        val svc = newService()
+        svc.registerSession("CP1", mockk(relaxed = true))
+        svc.handleMeterValues("CP1", MeterValuesRequest(connectorId = 1, meterValue = listOf(
+            MeterValue("t", listOf(SampledValue(value = "2300", measurand = Measurand.PowerActiveImport, unit = UnitOfMeasure.W))))))
+        val reading = svc.latestPowerReading("CP1", 1)
+        assertEquals(2300, reading?.watts)
+        assertTrue(reading!!.at.elapsedNow() < 5.seconds)
     }
 
     @Test

@@ -1,6 +1,7 @@
 package io.konektis.ocpp
 
 import io.klogging.Klogging
+import io.konektis.GlobalTimeSource
 import io.konektis.config.OcppConfig
 import io.konektis.ocpp.db.*
 import io.ktor.websocket.*
@@ -22,16 +23,20 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration.Companion.seconds
 
 // ---- Live (in-memory) state ----
+
+/** A power sample plus the monotonic moment it arrived, for staleness checks. */
+data class PowerReading(val watts: Int, val at: ComparableTimeMark)
 
 class ConnectorState(
     val connectorId: Int,
     var status: ChargePointStatus = ChargePointStatus.Available,
     var errorCode: ChargePointErrorCode = ChargePointErrorCode.NoError,
     var currentTransactionId: Int? = null,
-    var lastPowerW: Int? = null,
+    var lastPower: PowerReading? = null,
 )
 
 class ChargePointSession(
@@ -231,7 +236,7 @@ class OcppService(
 
         val powerW = extractActivePowerW(request)
         if (powerW != null) {
-            connector?.lastPowerW = powerW
+            connector?.lastPower = PowerReading(powerW, GlobalTimeSource.source.markNow())
             if (s != null && !s.powerImportSeen) {
                 s.powerImportSeen = true
                 chargePoints.setPowerImportSeen(chargePointId, true)
@@ -260,7 +265,11 @@ class OcppService(
 
     /** Latest active-power reading (W) for a connector, or null until one arrives. */
     fun latestPowerW(chargePointId: String, connectorId: Int): Int? =
-        sessions[chargePointId]?.connectors?.get(connectorId)?.lastPowerW
+        latestPowerReading(chargePointId, connectorId)?.watts
+
+    /** Latest active-power reading with its arrival time, for staleness checks. */
+    fun latestPowerReading(chargePointId: String, connectorId: Int): PowerReading? =
+        sessions[chargePointId]?.connectors?.get(connectorId)?.lastPower
 
     /** Latest known OCPP connector status, or null if the charge point/connector is unknown. */
     fun connectorStatus(chargePointId: String, connectorId: Int): ChargePointStatus? =
@@ -317,7 +326,7 @@ class OcppService(
                     smartChargingSupported = s.smartChargingSupported,
                     powerReadable = s.powerImportSeen,
                     connectors = s.connectors.values.map { c ->
-                        OcppConnectorView(c.connectorId, c.status.name, c.lastPowerW, c.currentTransactionId)
+                        OcppConnectorView(c.connectorId, c.status.name, c.lastPower?.watts, c.currentTransactionId)
                     }.sortedBy { it.connectorId },
                 )
             }.sortedBy { it.chargePointId },

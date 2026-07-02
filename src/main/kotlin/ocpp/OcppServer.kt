@@ -52,7 +52,7 @@ class OcppMessageHandler(private val service: OcppService) {
         } catch (e: Exception) {
             log.error("connection error for {cp}: {err}", chargePointId, e.message)
         } finally {
-            service.unregisterSession(chargePointId)
+            service.unregisterSession(chargePointId, session)
             log.info("OCPP connection closed for {cp}", chargePointId)
         }
     }

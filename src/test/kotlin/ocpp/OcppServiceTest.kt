@@ -175,6 +175,19 @@ class OcppServiceTest {
     }
 
     @Test
+    fun `stale connection close does not evict a newer session`() = runTest {
+        val svc = newService()
+        val oldWs = mockk<DefaultWebSocketSession>(relaxed = true)
+        val newWs = mockk<DefaultWebSocketSession>(relaxed = true)
+        svc.registerSession("CP1", oldWs)
+        svc.registerSession("CP1", newWs)   // charger reconnected while the old socket lingers
+        svc.unregisterSession("CP1", oldWs) // the old connection finally times out
+        assertNotNull(svc.getSession("CP1"), "live session must survive the stale close")
+        svc.unregisterSession("CP1", newWs)
+        assertNull(svc.getSession("CP1"))
+    }
+
+    @Test
     fun previouslyAcceptedChargePointStaysAcceptedWithAutoAcceptOff() = runTest {
         val db = freshTestDb()
         // First boot with auto-accept on: CPX gets accepted + persisted.

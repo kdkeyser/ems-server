@@ -102,8 +102,16 @@ class OcppService(
         recomputeState()
     }
 
-    suspend fun unregisterSession(chargePointId: String) {
-        sessions.remove(chargePointId)
+    suspend fun unregisterSession(chargePointId: String, session: DefaultWebSocketSession) {
+        // Only evict the session this connection registered: on a quick reconnect the new
+        // connection has already replaced the map entry, and the old handler's close must
+        // not remove it — that would leave a connected charger invisible to the EMS.
+        val current = sessions[chargePointId]
+        if (current?.session !== session) {
+            logger.info("Ignoring close of a superseded connection for $chargePointId")
+            return
+        }
+        sessions.remove(chargePointId, current)
         logger.info("Unregistered charge point $chargePointId")
         recomputeState()
     }

@@ -17,12 +17,11 @@ enum class MessageType(val value: Int) {
  * OCPP 1.6J Action Types
  */
 enum class Action {
-    // Core Profile
+    // Core Profile (inbound actions handled in OcppMessageHandler + outbound commands we send).
+    // Unsupported OCPP 1.6 actions are omitted — an inbound one gets a NotSupported CALL_ERROR
+    // from the dispatch fallthrough either way.
     Authorize,
     BootNotification,
-    ChangeAvailability,
-    ChangeConfiguration,
-    ClearCache,
     DataTransfer,
     GetConfiguration,
     Heartbeat,
@@ -33,29 +32,13 @@ enum class Action {
     StartTransaction,
     StatusNotification,
     StopTransaction,
-    UnlockConnector,
-    
+
     // Smart Charging Profile
     ClearChargingProfile,
-    GetCompositeSchedule,
     SetChargingProfile,
-    
+
     // Remote Trigger Profile
     TriggerMessage,
-    
-    // Firmware Management Profile
-    GetDiagnostics,
-    DiagnosticsStatusNotification,
-    FirmwareStatusNotification,
-    UpdateFirmware,
-    
-    // Local Auth List Management Profile
-    GetLocalListVersion,
-    SendLocalList,
-    
-    // Reservation Profile
-    CancelReservation,
-    ReserveNow
 }
 
 /**
@@ -73,47 +56,6 @@ enum class ErrorCode {
     TypeConstraintViolation,
     GenericError
 }
-
-/**
- * Base OCPP Message
- */
-sealed class OcppMessage {
-    abstract val messageTypeId: Int
-    abstract val uniqueId: String
-}
-
-/**
- * OCPP Call Message (Request from Charge Point or Central System)
- */
-@Serializable
-data class OcppCall(
-    override val messageTypeId: Int = MessageType.CALL.value,
-    override val uniqueId: String,
-    val action: String,
-    val payload: JsonObject
-) : OcppMessage()
-
-/**
- * OCPP CallResult Message (Response)
- */
-@Serializable
-data class OcppCallResult(
-    override val messageTypeId: Int = MessageType.CALL_RESULT.value,
-    override val uniqueId: String,
-    val payload: JsonObject
-) : OcppMessage()
-
-/**
- * OCPP CallError Message (Error Response)
- */
-@Serializable
-data class OcppCallError(
-    override val messageTypeId: Int = MessageType.CALL_ERROR.value,
-    override val uniqueId: String,
-    val errorCode: String,
-    val errorDescription: String,
-    val errorDetails: JsonObject = JsonObject(emptyMap())
-) : OcppMessage()
 
 // ============================================================================
 // Core Profile Messages
@@ -144,11 +86,6 @@ enum class RegistrationStatus {
     Pending,
     Rejected
 }
-
-@Serializable
-data class HeartbeatRequest(
-    val dummy: String? = null // Empty request
-)
 
 @Serializable
 data class HeartbeatResponse(
@@ -415,61 +352,6 @@ enum class DataTransferStatus {
 // ============================================================================
 
 @Serializable
-data class ChangeAvailabilityRequest(
-    val connectorId: Int,
-    val type: AvailabilityType
-)
-
-@Serializable
-data class ChangeAvailabilityResponse(
-    val status: AvailabilityStatus
-)
-
-enum class AvailabilityType {
-    Inoperative,
-    Operative
-}
-
-enum class AvailabilityStatus {
-    Accepted,
-    Rejected,
-    Scheduled
-}
-
-@Serializable
-data class ChangeConfigurationRequest(
-    val key: String,
-    val value: String
-)
-
-@Serializable
-data class ChangeConfigurationResponse(
-    val status: ConfigurationStatus
-)
-
-enum class ConfigurationStatus {
-    Accepted,
-    Rejected,
-    RebootRequired,
-    NotSupported
-}
-
-@Serializable
-data class ClearCacheRequest(
-    val dummy: String? = null
-)
-
-@Serializable
-data class ClearCacheResponse(
-    val status: ClearCacheStatus
-)
-
-enum class ClearCacheStatus {
-    Accepted,
-    Rejected
-}
-
-@Serializable
 data class GetConfigurationRequest(
     val key: List<String>? = null
 )
@@ -495,59 +377,18 @@ data class RemoteStartTransactionRequest(
 )
 
 @Serializable
-data class RemoteStartTransactionResponse(
-    val status: RemoteStartStopStatus
-)
-
-@Serializable
 data class RemoteStopTransactionRequest(
     val transactionId: Int
 )
-
-@Serializable
-data class RemoteStopTransactionResponse(
-    val status: RemoteStartStopStatus
-)
-
-enum class RemoteStartStopStatus {
-    Accepted,
-    Rejected
-}
 
 @Serializable
 data class ResetRequest(
     val type: ResetType
 )
 
-@Serializable
-data class ResetResponse(
-    val status: ResetStatus
-)
-
 enum class ResetType {
     Hard,
     Soft
-}
-
-enum class ResetStatus {
-    Accepted,
-    Rejected
-}
-
-@Serializable
-data class UnlockConnectorRequest(
-    val connectorId: Int
-)
-
-@Serializable
-data class UnlockConnectorResponse(
-    val status: UnlockStatus
-)
-
-enum class UnlockStatus {
-    Unlocked,
-    UnlockFailed,
-    NotSupported
 }
 
 // ============================================================================
@@ -612,50 +453,9 @@ data class SetChargingProfileRequest(
 )
 
 @Serializable
-data class SetChargingProfileResponse(
-    val status: ChargingProfileStatus
-)
-
-enum class ChargingProfileStatus {
-    Accepted,
-    Rejected,
-    NotSupported
-}
-
-@Serializable
 data class ClearChargingProfileRequest(
     val id: Int? = null,
     val connectorId: Int? = null,
     val chargingProfilePurpose: ChargingProfilePurposeType? = null,
     val stackLevel: Int? = null
 )
-
-@Serializable
-data class ClearChargingProfileResponse(
-    val status: ClearChargingProfileStatus
-)
-
-enum class ClearChargingProfileStatus {
-    Accepted,
-    Unknown
-}
-
-@Serializable
-data class GetCompositeScheduleRequest(
-    val connectorId: Int,
-    val duration: Int,
-    val chargingRateUnit: ChargingRateUnitType? = null
-)
-
-@Serializable
-data class GetCompositeScheduleResponse(
-    val status: GetCompositeScheduleStatus,
-    val connectorId: Int? = null,
-    val scheduleStart: String? = null,
-    val chargingSchedule: ChargingSchedule? = null
-)
-
-enum class GetCompositeScheduleStatus {
-    Accepted,
-    Rejected
-}

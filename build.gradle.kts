@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.ktor)
@@ -8,6 +10,20 @@ plugins {
 
 group = "io.konektis"
 version = "0.0.1"
+
+// Pin both Java and Kotlin to JVM target 24. Kotlin 2.2.x can't emit bytecode newer than 24, so on
+// a host JDK 25/26 compileJava would default to the host version and mismatch compileKotlin (24),
+// failing the build. Emitting 24 keeps the two consistent while still building on a newer JDK.
+java {
+    sourceCompatibility = JavaVersion.VERSION_24
+    targetCompatibility = JavaVersion.VERSION_24
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_24
+    }
+}
 
 application {
     mainClass = "io.konektis.ApplicationKt"

@@ -5,7 +5,10 @@
 # host's warm Gradle cache + daemon + incremental compile build the jar in seconds, versus a cold
 # clean build of minutes inside Docker. For a fully self-contained in-container build instead, use
 # the multi-stage ./Dockerfile (deploy/build-podman.sh --in-container).
-FROM docker.io/library/eclipse-temurin:21-jre AS runtime
+#
+# The JRE major version must be >= the jvmTarget pinned in build.gradle.kts (24), or the jar
+# fails to load with UnsupportedClassVersionError. Bump both together.
+FROM docker.io/library/eclipse-temurin:24-jre AS runtime
 WORKDIR /app
 
 # Run as a non-root user. Pre-create + own /data and /config so that a freshly-created

@@ -137,10 +137,44 @@ fun Config.withBootstrapFrom(file: Config): Config = copy(
     configSource = file.configSource,
 )
 
+/** The credential that ships in the repo's dev `config.yaml`. Never acceptable on a real server. */
+private const val DEV_WS_PASSWORD = "password"
+
 fun Config.startupWarnings(): List<String> = buildList {
-    if (websocket.password == "password")
+    if (websocket.password == DEV_WS_PASSWORD)
         add("Default WebSocket password in use — set websocket.password in config.yaml")
 }
+
+/**
+ * Misconfigurations severe enough to abort the boot rather than warn.
+ *
+ * `/ws` authenticates by comparing against [WebSocketConfig] verbatim (see Sockets.kt), and that
+ * socket sets EMS mode and steers the battery and charger. [Config.websocket] also *defaults* to
+ * `user`/`password`, so a `websocket:` block that is missing, misindented, or left at the template
+ * values does not fail loudly — it silently opens control to anyone who guesses the dev credential.
+ * A warning is too easy to miss in the logs, so refuse to start instead.
+ *
+ * Only applied to a mounted production config: the bundled classpath resource legitimately ships the
+ * dev credential for local runs and tests, so callers gate this on [externalConfigFile] being
+ * non-null. See Application.kt.
+ */
+fun Config.fatalConfigErrors(): List<String> = buildList {
+    if (websocket.password == DEV_WS_PASSWORD)
+        add(
+            "websocket.password is still the dev default — set a strong value in config.yaml. " +
+                "This socket controls the battery and charger."
+        )
+    else if (websocket.password.isBlank())
+        add("websocket.password is blank — set a strong value in config.yaml.")
+}
+
+/**
+ * The external config file [loadConfig] would read, or null when it falls back to the bundled
+ * classpath resource. Lets callers tell a mounted production config from the dev resource.
+ */
+fun externalConfigFile(
+    filePath: String? = System.getenv("EMS_CONFIG") ?: "/config/config.yaml",
+): File? = filePath?.let { File(it) }?.takeIf { it.exists() }
 
 /**
  * Loads config from an external file when one exists, otherwise from the bundled classpath resource.
@@ -157,9 +191,9 @@ fun loadConfig(
     resource: String,
     filePath: String? = System.getenv("EMS_CONFIG") ?: "/config/config.yaml",
 ): Config {
-    val file = filePath?.let { File(it) }
+    val file = externalConfigFile(filePath)
     val builder = ConfigLoaderBuilder.default()
-    val source = if (file != null && file.exists()) {
+    val source = if (file != null) {
         builder.addFileSource(file)
     } else {
         builder.addResourceSource(resource)

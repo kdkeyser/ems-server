@@ -64,6 +64,14 @@ All `power: Int` fields in `EMSState` and `Update` use: **negative = producing/e
 
 ## Key Quirks
 
+- **Boot refuses default WebSocket credentials**: `/ws` sets EMS mode and steers the battery and
+  charger, and `Config.websocket` *defaults* to `user`/`password` — so a missing or misindented
+  `websocket:` block silently opens control rather than failing. `Config.fatalConfigErrors()` makes
+  that fatal: a blank or still-default `websocket.password` logs `FATAL` and exits 1. It applies only
+  when an external config file is mounted (`externalConfigFile()` non-null); local runs and tests fall
+  back to the bundled `src/main/resources/config.yaml`, which ships the dev credential on purpose and
+  only warns. Practical consequence: `deploy/config.yaml` must carry a real password or the container
+  will not start.
 - **SMASolar**: when the inverter is off (no sunlight), Modbus register 30775 returns `Int.MIN_VALUE`. Treat as 0W.
 - **Webasto**: requires a Modbus keepalive write to register 6000 every <30 seconds or it drops remote control.
 - **SMABattery**: write 802 to register 40151 to enable Modbus power control *before* writing

@@ -10,6 +10,8 @@ import io.konektis.config.ConfigService
 import io.konektis.config.ConfigSource
 import io.konektis.config.ConfigStore
 import io.konektis.config.configureConfigApi
+import io.konektis.config.externalConfigFile
+import io.konektis.config.fatalConfigErrors
 import io.konektis.config.loadConfig
 import io.konektis.config.startupWarnings
 import io.konektis.config.WebSocketConfig
@@ -35,6 +37,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.system.exitProcess
 
 suspend fun main(args: Array<String>) {
     Main().main(args)
@@ -73,6 +76,17 @@ class Main : Klogging {
             logger.info("Heat pumps: ${config.devices.heatPump.joinToString { "${it.name} @ ${it.host}" }}")
         logger.info("Refresh interval: 5s, threads: ${config.refreshThreads}")
         config.startupWarnings().forEach { logger.warn(it) }
+
+        // Refuse to run a deployed server on unsafe credentials. Gated on a mounted config file:
+        // local runs and tests fall back to the bundled resource, which ships the dev credential on
+        // purpose. See Config.fatalConfigErrors().
+        if (externalConfigFile() != null) {
+            val fatal = config.fatalConfigErrors()
+            if (fatal.isNotEmpty()) {
+                fatal.forEach { logger.error("FATAL: $it") }
+                exitProcess(1)
+            }
+        }
 
         // Create the DI component
         val component = AppComponent::class.create(config, configService)

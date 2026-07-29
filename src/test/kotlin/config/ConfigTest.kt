@@ -92,6 +92,39 @@ class ConfigTest {
         assertTrue(warnCfg().startupWarnings().isEmpty())
     }
 
+    @Test fun `fatalConfigErrors rejects the default websocket password`() {
+        val errors = warnCfg(websocket = WebSocketConfig("user", "password")).fatalConfigErrors()
+        assertTrue(errors.any { it.contains("websocket.password") })
+    }
+
+    @Test fun `fatalConfigErrors rejects a blank websocket password`() {
+        assertTrue(warnCfg(websocket = WebSocketConfig("user", "")).fatalConfigErrors().isNotEmpty())
+        assertTrue(warnCfg(websocket = WebSocketConfig("user", "   ")).fatalConfigErrors().isNotEmpty())
+    }
+
+    @Test fun `fatalConfigErrors accepts a real password`() {
+        assertTrue(warnCfg(websocket = WebSocketConfig("user", "s3cret")).fatalConfigErrors().isEmpty())
+    }
+
+    @Test fun `externalConfigFile is null when the path does not exist`() {
+        assertEquals(null, externalConfigFile("/no/such/ems-config-does-not-exist.yaml"))
+        assertEquals(null, externalConfigFile(null))
+    }
+
+    @Test fun `externalConfigFile resolves an existing path`() {
+        val tmp = File.createTempFile("ems-external", ".yaml").also { it.deleteOnExit() }
+        assertEquals(tmp.absolutePath, externalConfigFile(tmp.absolutePath)?.absolutePath)
+    }
+
+    // The bundled dev resource legitimately ships user/password, so the fatal check must never fire
+    // for it — only a mounted production config is held to the stricter standard.
+    @Test fun `bundled dev resource is not subject to the fatal check`() {
+        val dev = loadConfig("/config.yaml", filePath = null)
+        assertEquals("password", dev.websocket.password)
+        assertTrue(dev.fatalConfigErrors().isNotEmpty())
+        assertEquals(null, externalConfigFile("/no/such/ems-config-does-not-exist.yaml"))
+    }
+
     @Test
     fun clickHouseLoadsFromFile() {
         val yaml = """

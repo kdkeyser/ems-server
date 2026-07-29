@@ -3,6 +3,7 @@ package io.konektis.ems
 import io.konektis.ems.data.model.DeviceHealth
 import io.konektis.ems.data.model.DeviceStatus
 import io.konektis.ems.data.model.StatusState
+import io.konektis.ems.data.ws.WS_JSON
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
@@ -38,6 +39,38 @@ class StatusStateTest {
             batteryCharge = 62, chargerW = 0, heatpumpW = null
         )
         assertEquals(state, Json.decodeFromString<StatusState>(Json.encodeToString(state)))
+    }
+
+    @Test
+    fun `WS_JSON skips server fields this app version does not know`() {
+        // A newer server adds a field to DeviceHealth.Online. The strict default Json throws on it,
+        // which killed the socket and bricked installed apps; WS_JSON must skip it instead.
+        val fromNewerServer = """
+            {"type":"online","lastSeenAt":1748000000000,"powerW":1800,"someFutureField":42}
+        """.trimIndent()
+        val health = WS_JSON.decodeFromString<DeviceHealth>(fromNewerServer)
+        assertEquals(DeviceHealth.Online(1748000000000L, 1800), health)
+    }
+
+    @Test
+    fun `WS_JSON parses the batterySoc field that broke the app`() {
+        val withSoc = """
+            {"type":"online","lastSeenAt":1748000000000,"powerW":200,"extraInfo":"62% SoC","batterySoc":62}
+        """.trimIndent()
+        val health = WS_JSON.decodeFromString<DeviceHealth>(withSoc) as DeviceHealth.Online
+        assertEquals(62, health.batterySoc)
+        assertEquals("62% SoC", health.extraInfo)
+    }
+
+    @Test
+    fun `StatusState tolerates an unknown top-level field`() {
+        val fromNewerServer = """
+            {"devices":[],"totalSolarW":3200,"gridW":-800,"batteryW":200,"batteryCharge":62,
+             "chargerW":0,"heatpumpW":null,"someFutureTopLevelField":"x"}
+        """.trimIndent()
+        val state = WS_JSON.decodeFromString<StatusState>(fromNewerServer)
+        assertEquals(3200, state.totalSolarW)
+        assertEquals(62, state.batteryCharge)
     }
 
     @Test

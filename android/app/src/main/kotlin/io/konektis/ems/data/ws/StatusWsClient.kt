@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.isActive
-import kotlinx.serialization.json.Json
 
 class StatusWsClient(
     private val settings: SettingsRepository,
@@ -57,7 +56,7 @@ class StatusWsClient(
                             _connectionState.value = ConnectionState.Connected
                             for (frame in incoming) {
                                 if (frame is Frame.Text) {
-                                    emit(Json.decodeFromString<StatusState>(frame.readText()))
+                                    emit(WS_JSON.decodeFromString<StatusState>(frame.readText()))
                                 }
                             }
                             _connectionState.value = ConnectionState.Disconnected()

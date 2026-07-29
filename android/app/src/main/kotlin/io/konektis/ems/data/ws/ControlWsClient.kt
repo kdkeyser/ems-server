@@ -28,7 +28,6 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 class ControlWsClient(
     private val settings: SettingsRepository,
@@ -75,18 +74,18 @@ class ControlWsClient(
                         ) {
                             attempt = 0
                             outgoing.send(Frame.Text(
-                                Json.encodeToString<ClientMessage>(
+                                WS_JSON.encodeToString<ClientMessage>(
                                     ClientMessage.Authenticate(s.username, s.password)
                                 )
                             ))
                             val cmdJob = launch {
                                 for (cmd in commandChannel) {
-                                    outgoing.send(Frame.Text(Json.encodeToString<ClientMessage>(cmd)))
+                                    outgoing.send(Frame.Text(WS_JSON.encodeToString<ClientMessage>(cmd)))
                                 }
                             }
                             for (frame in incoming) {
                                 if (frame is Frame.Text) {
-                                    when (val msg = Json.decodeFromString<Message>(frame.readText())) {
+                                    when (val msg = WS_JSON.decodeFromString<Message>(frame.readText())) {
                                         is Message.Authenticated ->
                                             _connectionState.value = ControlState.Authenticated
                                         is Message.Unauthorized -> {

@@ -9,7 +9,9 @@ sealed class DeviceHealth {
     data class Online(
         val lastSeenAt: Long,
         val powerW: Int,
-        val extraInfo: String? = null
+        val extraInfo: String? = null,
+        /** Battery SoC as a typed percentage. Mirrors the server field; null for non-battery devices. */
+        val batterySoc: Int? = null
     ) : DeviceHealth()
 
     @Serializable @SerialName("offline")
